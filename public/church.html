@@ -1,0 +1,1864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Church: GospelGoLive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700;9..144,800&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://js.stripe.com/v3/"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mux/mux-player@3" defer></script>
+<script src="/posthog-init.js"></script>
+<script src="/cookie-consent.js" defer></script>
+<style>
+:root{
+  /* Dark-themed page, no light variant — without this the browser still
+     renders native widgets (select dropdown popups, scrollbars) using its
+     light-OS default, while our global color:var(--text) (near-white) still
+     inherits into <option> text, making dropdown options invisible. */
+  color-scheme: dark;
+  --bg: #0a1530;
+  --bg-deep: #060c1f;
+  --bg-alt: #0f1e42;
+  --panel: #122548;
+  --panel-2: #16294f;
+  --border: rgba(232,184,75,0.16);
+  --border-soft: rgba(255,255,255,0.08);
+  --gold: #e8b84b;
+  --gold-soft: #f5d787;
+  --gold-dim: rgba(232,184,75,0.14);
+  --teal: #3fa39b;
+  --text: #eef1f8;
+  --text-dim: #a6b0cc;
+  --text-faint: #6b7593;
+  --red: #e05a5a;
+  --shadow: 0 20px 60px rgba(3,7,20,0.55);
+  --ease: cubic-bezier(.16,.84,.44,1);
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+html{scroll-behavior:smooth;}
+body{background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; line-height:1.5; -webkit-font-smoothing:antialiased; overflow-x:hidden;}
+img{display:block; max-width:100%;}
+a{color:inherit; text-decoration:none;}
+button{font-family:inherit; cursor:pointer;}
+h1,h2,h3,h4{font-family:'Fraunces',serif; font-weight:600; letter-spacing:-0.01em;}
+.container{max-width:1240px; margin:0 auto; padding:0 32px;}
+.eyebrow{font-family:'IBM Plex Mono',monospace; font-size:12.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--gold); display:flex; align-items:center; gap:10px; font-weight:500;}
+.eyebrow::before{content:''; width:18px; height:1px; background:var(--gold); display:inline-block;}
+
+.nav{position:fixed; top:0; left:0; right:0; z-index:500; display:flex; align-items:center; justify-content:space-between; padding:16px 32px; background:rgba(8,16,38,0.72); backdrop-filter:blur(14px); border-bottom:1px solid var(--border-soft);}
+.brand{display:flex; align-items:center; gap:10px;}
+.brand-badge{width:38px; height:38px; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+.brand-badge img{width:38px; height:38px; object-fit:contain;}
+.brand-name{font-family:'Fraunces',serif; font-size:21px; font-weight:700; letter-spacing:-0.01em;}
+.brand-name .dotcom{color:var(--gold); font-weight:600;}
+
+.btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:11px 22px; border-radius:999px; font-size:14.5px; font-weight:600; border:1px solid transparent; transition:all .25s var(--ease); white-space:nowrap;}
+.btn-gold{background:linear-gradient(180deg,var(--gold-soft),var(--gold)); color:#20160a; box-shadow:0 8px 22px rgba(232,184,75,0.22);}
+.btn-gold:hover{transform:translateY(-2px); box-shadow:0 12px 28px rgba(232,184,75,0.32);}
+.btn-outline{background:transparent; border-color:rgba(255,255,255,0.22); color:var(--text);}
+.btn-outline:hover{border-color:var(--gold); color:var(--gold-soft);}
+.btn-block{width:100%;}
+.btn-sm{padding:8px 16px; font-size:13.5px; flex-shrink:0;}
+.btn:disabled{opacity:0.6; cursor:default; transform:none !important;}
+.follow-btn{padding:11px 22px; border-radius:999px; font-size:14.5px; font-weight:600; border:1px solid var(--border-soft); background:none; color:var(--text-dim);}
+.follow-btn.following{background:var(--gold-dim); border-color:var(--gold); color:var(--gold-soft);}
+
+section{padding:70px 0;}
+
+/* profile header */
+.profile-banner{display:none; width:100%; height:220px; margin-top:78px; background-size:cover; background-position:center; background-color:var(--panel-2);}
+.profile-header{padding:150px 0 50px; border-bottom:1px solid var(--border-soft); background:var(--bg-alt);}
+.profile-header.has-banner{padding-top:40px;}
+.profile-head-row{display:flex; align-items:center; justify-content:space-between; gap:24px; flex-wrap:wrap;}
+.profile-avatar{width:84px; height:84px; border-radius:50%; background:linear-gradient(135deg,var(--teal),var(--gold)); display:flex; align-items:center; justify-content:center; font-family:'Fraunces',serif; font-weight:700; font-size:32px; color:#0a1530; flex-shrink:0; overflow:hidden;}
+.profile-avatar img{width:100%; height:100%; object-fit:cover;}
+.profile-title{display:flex; gap:20px; align-items:center;}
+.profile-title h1{font-size:34px; color:#fff;}
+.profile-title p{color:var(--text-dim); font-size:14.5px; margin-top:6px;}
+.profile-meta{display:flex; gap:20px; margin-top:14px; font-size:13px; color:var(--text-faint);}
+.profile-actions{display:flex; gap:12px; flex-wrap:wrap;}
+.profile-bio{color:var(--text-dim); font-size:15px; max-width:640px; margin-top:22px;}
+
+/* live box */
+.live-box{background:var(--panel); border:1px solid var(--border); border-radius:22px; padding:28px; margin-top:32px;}
+.live-badge{display:flex; align-items:center; gap:6px; background:rgba(224,90,90,0.16); border:1px solid rgba(224,90,90,0.4); color:#ff8383; font-size:11.5px; font-weight:700; padding:5px 10px; border-radius:999px; letter-spacing:.05em; width:fit-content; margin-bottom:16px;}
+.live-dot{width:7px; height:7px; border-radius:50%; background:#ff5959; animation:pulse 1.4s infinite;}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,89,89,.55);} 70%{box-shadow:0 0 0 8px rgba(255,89,89,0);} 100%{box-shadow:0 0 0 0 rgba(255,89,89,0);}}
+.live-box h3{color:#fff; font-size:22px; margin:16px 0 6px;}
+.live-box p{color:var(--text-dim); font-size:14px; max-width:640px;}
+
+/* responsive media frame — scales for phones, tablets, desktop and TVs while
+   always keeping a 16:9 picture (no letterboxing, no stretching) */
+.media-frame{position:relative; width:100%; aspect-ratio:16/9; background:#000; border-radius:16px; overflow:hidden;}
+.media-frame mux-player{width:100%; height:100%; display:block;}
+
+/* action bar: like / comment / share / give, shared by the live player and
+   every sermon's watch modal */
+.action-bar{display:flex; align-items:center; gap:10px; margin-top:18px; flex-wrap:wrap; position:relative;}
+.action-btn{display:inline-flex; align-items:center; gap:7px; padding:9px 16px; border-radius:999px; border:1px solid var(--border-soft); background:rgba(255,255,255,0.03); color:var(--text-dim); font-size:13.5px; font-weight:600; transition:all .2s var(--ease); cursor:pointer; font-family:inherit;}
+.action-btn:hover{border-color:var(--gold); color:var(--gold-soft); transform:translateY(-1px);}
+.action-btn.active{background:var(--gold-dim); border-color:var(--gold); color:var(--gold-soft);}
+.action-btn .ico{font-size:15px; line-height:1; display:inline-flex;}
+.action-btn .ico svg{display:block;}
+.action-btn.give-action{margin-left:auto; background:linear-gradient(180deg,var(--gold-soft),var(--gold)); color:#20160a; border-color:transparent;}
+.action-btn.give-action:hover{transform:translateY(-2px); box-shadow:0 8px 22px rgba(232,184,75,0.28); color:#20160a;}
+
+/* live heart burst — tap-as-many-times-as-you-like, TikTok style */
+.heart-burst-anchor{position:relative; display:inline-flex;}
+.floating-heart{position:absolute; bottom:60%; left:50%; pointer-events:none; z-index:60; line-height:1; animation:floatHeart 1.3s ease-out forwards; will-change:transform, opacity;}
+@keyframes floatHeart{
+  0%{ transform:translate(-50%, 0) scale(0.5) rotate(0deg); opacity:0; }
+  12%{ opacity:1; transform:translate(-50%, -8px) scale(1.15) rotate(-6deg); }
+  100%{ transform:translate(calc(-50% + var(--drift, 20px)), -130px) scale(0.85) rotate(8deg); opacity:0; }
+}
+
+/* share popover */
+.share-wrap{position:relative;}
+.share-menu{position:absolute; bottom:calc(100% + 10px); left:0; background:var(--panel-2); border:1px solid var(--border-soft); border-radius:14px; padding:8px; display:none; flex-direction:column; gap:2px; min-width:200px; box-shadow:var(--shadow); z-index:20;}
+.share-menu.show{display:flex;}
+.share-menu button{display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:9px; background:none; border:none; color:var(--text-dim); font-size:13px; text-align:left; font-family:inherit; cursor:pointer;}
+.share-menu button:hover{background:rgba(255,255,255,0.06); color:var(--text);}
+
+/* comments */
+.comments-panel{margin-top:20px; border-top:1px solid var(--border-soft); padding-top:20px;}
+.comments-panel h4{color:#fff; font-size:14.5px; margin-bottom:14px;}
+.comment-form{display:flex; gap:10px; margin-bottom:18px; align-items:flex-start;}
+.comment-form textarea{flex:1; resize:none; background:var(--bg-deep); border:1px solid var(--border-soft); border-radius:12px; padding:10px 14px; color:var(--text); font-size:13.5px; font-family:inherit; outline:none; min-height:44px;}
+.comment-form textarea:focus{border-color:var(--gold);}
+.comment-list{display:flex; flex-direction:column; gap:16px; max-height:340px; overflow-y:auto;}
+.comment-item{display:flex; gap:10px;}
+.comment-avatar{width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,var(--teal),var(--gold)); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:#0a1530; flex-shrink:0;}
+.comment-body{flex:1; min-width:0;}
+.comment-body .meta{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-faint); margin-bottom:3px;}
+.comment-body .meta b{color:var(--text); font-size:12.5px; font-weight:600;}
+.comment-body p{font-size:13.5px; color:var(--text-dim); line-height:1.5; word-wrap:break-word;}
+.comment-delete{background:none; border:none; color:var(--text-faint); font-size:12px; cursor:pointer; margin-left:auto; flex-shrink:0;}
+.comment-delete:hover{color:var(--red);}
+.comment-empty{color:var(--text-faint); font-size:13px;}
+.comment-footer{margin-top:6px;}
+.comment-like-btn{display:inline-flex; align-items:center; gap:5px; background:none; border:none; color:var(--text-faint); font-size:12px; font-family:inherit; cursor:pointer; padding:0;}
+.comment-like-btn:hover{color:var(--gold-soft);}
+.comment-like-btn.liked{color:#ff5959;}
+.comment-like-btn .ico{font-size:13px; line-height:1; display:inline-flex;}
+.comment-like-btn .ico svg{display:block;}
+
+/* live viewing layout — video + everything else on the left, a tall
+   black "prompter" chat feed on the right, side by side. */
+.live-layout{display:grid; grid-template-columns:1.4fr 1fr; gap:24px; align-items:start;}
+.live-chat-col{display:flex; flex-direction:column;}
+#liveComments{position:relative; display:flex; flex-direction:column; height:640px; max-height:80vh; background:#000; border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:16px; margin-top:0; overflow:hidden;}
+#liveComments h4{color:#fff; font-size:14.5px; margin-bottom:12px; flex-shrink:0;}
+#liveComments .comment-list{flex:1; max-height:none; background:transparent; margin-bottom:12px; font-family:'IBM Plex Mono',monospace;}
+#liveComments .comment-form{flex-shrink:0; margin-bottom:0;}
+#liveComments .comment-item{animation:promptIn .3s ease;}
+#liveComments .comment-avatar{background:linear-gradient(135deg,var(--teal),var(--gold)); flex-shrink:0;}
+#liveComments .comment-body .meta b{color:var(--gold-soft); font-size:12px;}
+#liveComments .comment-body .meta span{color:rgba(255,255,255,0.35); font-size:10.5px;}
+#liveComments .comment-body p{color:#f1f1f4; font-size:12.5px;}
+#liveComments .comment-empty{color:rgba(255,255,255,0.35); font-family:'IBM Plex Mono',monospace; font-size:12.5px;}
+#liveComments .comment-like-btn{color:rgba(255,255,255,0.35);}
+#liveComments .comment-like-btn:hover{color:var(--gold-soft);}
+#liveComments .comment-like-btn.liked{color:#ff5959;}
+@keyframes promptIn{from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);}}
+
+/* chat toolbar — like + give buttons live right in the composer, and the
+   heart tap flows a heart up through the chat itself rather than just
+   above the action bar. */
+#liveComments .comment-form{gap:8px;}
+.comment-tool-btn{flex-shrink:0; width:38px; height:38px; border-radius:50%; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.04); color:rgba(255,255,255,0.7); font-size:16px; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .2s var(--ease);}
+.comment-tool-btn:hover{border-color:var(--gold); color:var(--gold-soft); transform:translateY(-1px);}
+.chat-like-btn:hover{color:#ff5959; border-color:#ff5959;}
+.chat-give-btn{background:linear-gradient(180deg,var(--gold-soft),var(--gold)); color:#20160a; border-color:transparent;}
+.chat-give-btn:hover{color:#20160a; box-shadow:0 6px 16px rgba(232,184,75,0.3);}
+
+.chat-fx-layer{position:absolute; inset:0; pointer-events:none; overflow:hidden; border-radius:16px; z-index:5;}
+.chat-floating-heart{position:absolute; bottom:70px; left:50%; pointer-events:none; line-height:1; animation:chatFloatHeart 2.2s ease-out forwards; will-change:transform, opacity;}
+@keyframes chatFloatHeart{
+  0%{ transform:translate(-50%, 0) scale(0.6) rotate(0deg); opacity:0; }
+  10%{ opacity:1; transform:translate(-50%, -30px) scale(1.1) rotate(-6deg); }
+  100%{ transform:translate(calc(-50% + var(--drift, 20px)), -560px) scale(0.85) rotate(8deg); opacity:0; }
+}
+/* full-screen tap-to-like layer — only shown in the mobile immersive live
+   view (see the max-width:760px block below); hidden entirely on desktop
+   where the side-by-side layout and normal action-bar like button apply. */
+.live-tap-layer{display:none;}
+.tap-heart{position:absolute; pointer-events:none; line-height:1; animation:tapHeartFloat 1.3s ease-out forwards; will-change:transform, opacity;}
+@keyframes tapHeartFloat{
+  0%{ transform:translate(-50%,-50%) scale(0.5) rotate(0deg); opacity:0; }
+  12%{ opacity:1; transform:translate(-50%,-50%) scale(1.2) rotate(-8deg); }
+  100%{ transform:translate(calc(-50% + var(--drift, 20px)), calc(-50% - 320px)) scale(0.85) rotate(10deg); opacity:0; }
+}
+
+.chat-gift-burst{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; gap:8px; animation:chatGiftBurst 3.2s ease-out forwards;}
+.chat-gift-burst svg{width:60px; height:60px; stroke:var(--gold-soft); filter:drop-shadow(0 0 18px rgba(232,184,75,0.65));}
+.chat-gift-burst span{font-size:12.5px; font-weight:700; color:var(--gold-soft); background:rgba(0,0,0,0.6); padding:5px 14px; border-radius:999px; white-space:nowrap;}
+@keyframes chatGiftBurst{
+  0%{ opacity:0; transform:translate(-50%,-50%) scale(0.4); }
+  14%{ opacity:1; transform:translate(-50%,-50%) scale(1.15); }
+  24%{ transform:translate(-50%,-50%) scale(1); }
+  78%{ opacity:1; transform:translate(-50%,-58%) scale(1); }
+  100%{ opacity:0; transform:translate(-50%,-70%) scale(0.9); }
+}
+
+/* live poll + prayer requests (Ministry+) */
+.live-poll-panel{margin:16px 0 20px; border-top:1px solid var(--border-soft); border-bottom:1px solid var(--border-soft); padding:18px 0;}
+.live-poll-panel h4{color:#fff; font-size:14.5px; margin-bottom:12px; display:flex; align-items:center; gap:8px;}
+.live-poll-panel h4 svg, .prayer-panel h4 svg{color:var(--gold-soft); flex-shrink:0;}
+.poll-question{font-size:15px; font-weight:600; color:var(--text); margin-bottom:14px;}
+.poll-options{display:flex; flex-wrap:wrap; gap:10px;}
+.poll-option-btn{padding:10px 18px; border-radius:999px; border:1px solid var(--border-soft); background:rgba(255,255,255,0.03); color:var(--text-dim); font-size:13.5px; font-weight:600; font-family:inherit; cursor:pointer; transition:all .2s var(--ease);}
+.poll-option-btn:hover{border-color:var(--gold); color:var(--gold-soft); background:var(--gold-dim);}
+.poll-results{display:flex; flex-direction:column; gap:12px;}
+.poll-result-row .poll-result-label{display:flex; justify-content:space-between; align-items:center; font-size:13.5px; color:var(--text-dim); margin-bottom:6px;}
+.poll-result-row.leading .poll-result-label{color:var(--gold-soft); font-weight:700;}
+.poll-result-row .poll-result-label .mine{color:var(--teal); font-weight:700;}
+.poll-result-track{position:relative; height:10px; border-radius:999px; background:rgba(255,255,255,0.06); overflow:hidden;}
+.poll-result-fill{height:100%; border-radius:999px; background:linear-gradient(90deg,var(--teal),#4fc0b7); transition:width .4s var(--ease);}
+.poll-result-fill.leading{background:linear-gradient(90deg,var(--gold),var(--gold-soft)); box-shadow:0 0 10px rgba(232,184,75,0.35);}
+.poll-voted-note{font-size:12px; color:var(--text-faint); margin-top:14px;}
+.prayer-panel{margin:0 0 20px; border-bottom:1px solid var(--border-soft); padding-bottom:20px;}
+.prayer-panel h4{color:#fff; font-size:14.5px; margin-bottom:12px; display:flex; align-items:center; gap:8px;}
+.prayer-panel textarea{width:100%; box-sizing:border-box; resize:none; background:var(--bg-deep); border:1px solid var(--border-soft); border-radius:12px; padding:10px 14px; color:var(--text); font-size:13.5px; font-family:inherit; outline:none; min-height:60px; margin-bottom:10px;}
+.prayer-panel textarea:focus{border-color:var(--gold);}
+.prayer-panel label{display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--text-dim); margin-bottom:14px;}
+.prayer-success{font-size:12.5px; color:var(--teal); margin-top:10px; display:none;}
+
+/* sermon watch modal */
+.media-modal-overlay{position:fixed; inset:0; background:rgba(6,10,24,0.85); display:none; align-items:center; justify-content:center; z-index:1000; padding:20px;}
+.media-modal-overlay.show{display:flex;}
+.media-modal{width:100%; max-width:760px; max-height:92vh; overflow-y:auto; background:var(--panel); border-radius:20px; border:1px solid var(--border-soft);}
+.media-modal-head{display:flex; align-items:center; justify-content:space-between; padding:16px 20px;}
+.media-modal-head h3{color:#fff; font-size:17px;}
+.media-modal-close{background:none; border:none; color:var(--text-faint); font-size:22px; cursor:pointer; line-height:1;}
+.media-modal-body{padding:0 20px 24px;}
+
+/* sermons */
+.sermon-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:26px; margin-top:32px;}
+.sermon-card{background:var(--panel); border:1px solid var(--border-soft); border-radius:18px; overflow:hidden;}
+.sermon-thumb{position:relative; aspect-ratio:16/10; overflow:hidden; background:var(--panel-2); display:flex; align-items:center; justify-content:center; color:var(--text-faint); font-size:13px; cursor:pointer;}
+.sermon-thumb img{width:100%; height:100%; object-fit:cover;}
+.play-circle{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:48px; height:48px; border-radius:50%; background:rgba(244,246,251,0.92); display:flex; align-items:center; justify-content:center; z-index:2;}
+.play-circle::before{content:''; width:0; height:0; border-style:solid; border-width:8px 0 8px 13px; border-color:transparent transparent transparent #0a1530; margin-left:3px;}
+.dur-badge{position:absolute; bottom:12px; right:12px; z-index:2; background:rgba(8,16,38,0.8); font-size:11.5px; padding:4px 9px; border-radius:6px; font-family:'IBM Plex Mono',monospace; color:var(--text);}
+.tag-badge{position:absolute; top:12px; left:12px; z-index:2; background:rgba(8,16,38,0.75); font-size:11px; padding:5px 10px; border-radius:999px; color:var(--gold-soft); border:1px solid var(--border); font-weight:600;}
+.sermon-info{padding:18px;}
+.sermon-info h4{color:#fff; font-size:16px; margin-bottom:6px;}
+.sermon-info p{color:var(--text-faint); font-size:12.5px;}
+.empty-state{text-align:center; padding:60px 20px; color:var(--text-faint);}
+.empty-state .ico{font-size:34px; margin-bottom:14px;}
+
+/* give modal */
+.modal-overlay{display:none; position:fixed; inset:0; z-index:1000; background:rgba(6,12,31,0.75); backdrop-filter:blur(6px); align-items:center; justify-content:center; padding:24px;}
+.modal-overlay.show{display:flex;}
+.modal-card{background:var(--panel); border:1px solid var(--border-soft); border-radius:22px; padding:34px; max-width:440px; width:100%; max-height:88vh; overflow-y:auto;}
+.modal-card h2{font-size:22px; color:#fff; margin-bottom:6px;}
+.modal-card .sub{color:var(--text-faint); font-size:13.5px; margin-bottom:24px;}
+.modal-close{float:right; background:none; border:none; color:var(--text-faint); font-size:20px; cursor:pointer;}
+.field{margin-bottom:16px;}
+.field label{display:block; font-size:12.5px; color:var(--text-dim); margin-bottom:7px; font-weight:500;}
+.field input, .field select{width:100%; background:var(--bg-deep); border:1px solid var(--border-soft); border-radius:10px; padding:11px 14px; color:var(--text); font-size:14px; outline:none;}
+.field input:focus{border-color:var(--gold);}
+.amount-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:14px 0 20px;}
+.amount-btn{padding:14px; border-radius:10px; border:1px solid var(--border-soft); background:var(--bg-deep); color:var(--text); font-weight:600; transition:.2s;}
+.amount-btn.selected, .amount-btn:hover{border-color:var(--gold); background:var(--gold-dim); color:var(--gold-soft);}
+.toggle-row{display:flex; gap:10px; margin-bottom:20px;}
+.toggle-row button{flex:1; padding:10px; border-radius:10px; border:1px solid var(--border-soft); background:none; color:var(--text-dim); font-size:13px; font-weight:600;}
+.toggle-row button.active{background:var(--gold-dim); border-color:var(--gold); color:var(--gold-soft);}
+.msg{font-size:13px; margin-bottom:14px; display:none;}
+.msg.error{color:var(--red);}
+.msg.success{color:var(--teal);}
+#payment-element{margin:20px 0;}
+
+@media(max-width:760px){
+  .sermon-grid{grid-template-columns:1fr;}
+  .profile-head-row{flex-direction:column; align-items:flex-start;}
+  .action-btn span.label{display:none;}
+  .action-btn.give-action span.label{display:inline;}
+  .media-modal{max-width:100%;}
+  .live-layout{grid-template-columns:1fr;}
+  #liveComments{height:420px;}
+
+  /* Immersive full-screen live view — the camera fills the entire screen
+     (TikTok/IG Live style) instead of the desktop side-by-side layout.
+     Comments + the composer (like + give sit right in it already) overlay
+     the bottom portion on a dark scrim so the video stays visible behind
+     them, and a transparent tap layer over the video itself fires the same
+     heart-burst-and-like as the chat heart button. Poll/description/prayer
+     step aside here since there's no room for a second column. */
+  #liveBox{position:fixed; inset:0; z-index:250; margin:0; padding:0; background:#000;}
+  #liveBox .live-layout{display:block; height:100vh; height:100dvh; position:relative;}
+  #liveBox .live-main{position:absolute; inset:0;}
+  #liveBox .media-frame{position:absolute; inset:0; height:100%; border-radius:0;}
+  #liveBox .media-frame mux-player{width:100%; height:100%; object-fit:cover;}
+  #liveBox .live-tap-layer{display:block; position:absolute; inset:0; z-index:2;}
+  #liveBox .live-badge{position:absolute; top:64px; left:14px; z-index:3;}
+  #liveBox #liveTitle{position:absolute; top:104px; left:14px; right:14px; z-index:3; font-size:15px; color:#fff; text-shadow:0 1px 6px rgba(0,0,0,0.65);}
+  #liveBox .live-poll-panel, #liveBox #liveDescription, #liveBox .prayer-panel, #liveBox .action-bar{display:none;}
+  #liveBox .live-chat-col{position:absolute; left:0; right:0; bottom:0; z-index:4; max-height:44%; display:flex;}
+  #liveBox #liveComments{flex:1; height:auto; max-height:none; background:linear-gradient(to top, rgba(0,0,0,0.82) 45%, rgba(0,0,0,0.4) 82%, transparent); border:none; border-radius:0; padding:10px 14px calc(env(safe-area-inset-bottom, 0px) + 10px);}
+  #liveBox #liveComments h4{display:none;}
+  #liveBox #liveComments .comment-list{max-height:30vh;}
+  #liveBox #liveComments .comment-form{background:rgba(0,0,0,0.35); border-radius:24px; padding:6px 6px 6px 14px;}
+  #liveBox #liveComments .comment-form textarea{background:transparent; border:none; color:#fff; min-height:auto; padding:8px 0;}
+  body.live-immersive #gcw-launcher, body.live-immersive #gcw-panel{display:none;}
+
+  /* Nav bar was overflowing (scrollWidth > clientWidth) on narrow phones —
+     32px of horizontal padding plus the full "Back to GospelGoLive" label
+     didn't fit next to the brand, cutting the button off. */
+  .nav{padding:14px 16px;}
+  .brand-name{font-size:17px;}
+  .brand-name .dotcom{display:none;}
+  .nav .btn.btn-outline{padding:8px 14px; font-size:12.5px;}
+  .nav .btn.btn-outline .back-full{display:none;}
+
+  /* Profile header's 150px top padding is sized for the desktop nav/hero
+     balance — on a phone screen that's a huge blank gap before any real
+     content (avatar, name, actions) appears. Scale it down along with the
+     banner and avatar so the header's proportions actually fit a phone. */
+  .profile-header{padding:88px 0 32px;}
+  .profile-header.has-banner{padding-top:28px;}
+  .profile-banner{height:150px; margin-top:56px;}
+  .profile-avatar{width:64px; height:64px; font-size:24px;}
+  .profile-title h1{font-size:26px;}
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="/mockup.html" class="brand">
+    <div class="brand-badge"><img src="/images/logo_icon.png" alt="GospelGoLive"></div>
+    <div class="brand-name">GospelGoLive<span class="dotcom">.com</span></div>
+  </a>
+  <a href="/mockup.html" class="btn btn-outline">Back<span class="back-full"> to GospelGoLive</span></a>
+</nav>
+
+<div id="loadingState" style="min-height:100vh; display:flex; align-items:center; justify-content:center; color:var(--text-faint);">Loading church…</div>
+
+<div id="notFoundState" style="display:none; min-height:100vh; align-items:center; justify-content:center; flex-direction:column; gap:16px; text-align:center; padding:24px;">
+  <h1>Church not found</h1>
+  <p style="color:var(--text-faint)">This channel doesn't exist or has been removed.</p>
+  <a class="btn btn-gold" href="/mockup.html">Back to GospelGoLive</a>
+</div>
+
+<div id="profileContent" style="display:none;">
+  <div class="profile-banner" id="profileBanner"></div>
+  <section class="profile-header" id="profileHeaderSection">
+    <div class="container">
+      <div class="profile-head-row">
+        <div class="profile-title">
+          <div class="profile-avatar" id="churchAvatar">…</div>
+          <div>
+            <h1 id="churchName">…</h1>
+            <p id="pastorName">…</p>
+            <div class="profile-meta">
+              <span id="followerCount">0 followers</span>
+            </div>
+          </div>
+        </div>
+        <div class="profile-actions">
+          <button class="follow-btn" id="followBtn" onclick="handleFollowToggle()">Follow</button>
+          <button class="btn btn-gold" id="giveBtnHeader" onclick="attemptGive()">Place a Giving</button>
+        </div>
+      </div>
+      <p class="profile-bio" id="churchBio" style="display:none;"></p>
+
+      <div class="live-box" id="liveBox" style="display:none;">
+        <div class="live-layout">
+          <div class="live-main">
+            <div class="live-badge"><span class="live-dot"></span>LIVE NOW</div>
+            <div class="media-frame"><mux-player id="livePlayer" stream-type="live" min-resolution="720p" max-resolution="2160p"></mux-player></div>
+            <div class="live-tap-layer" id="liveTapLayer"></div>
+            <h3 id="liveTitle"></h3>
+
+            <!-- Ministry+ live poll, sits directly under the title -->
+            <div class="live-poll-panel" id="livePollWidget" style="display:none;">
+              <h4><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V10"/><path d="M12 20V4"/><path d="M19 20v-7"/></svg>Live Poll</h4>
+              <p class="poll-question" id="livePollQuestion"></p>
+              <div id="livePollOptions"></div>
+              <p class="poll-voted-note" id="livePollVotedNote" style="display:none;">Thanks for voting!</p>
+            </div>
+
+            <p id="liveDescription"></p>
+            <div class="action-bar" id="liveActionBar"></div>
+
+            <div class="prayer-panel" id="livePrayerWidget" style="display:none;">
+              <h4><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v6"/><path d="M9 3.5c-1.5 1-2.5 3-2.5 5.5 0 4 1.5 7 3.5 9.5"/><path d="M15 3.5c1.5 1 2.5 3 2.5 5.5 0 4-1.5 7-3.5 9.5"/><path d="M9 9c0 2 1.2 3.5 3 3.5s3-1.5 3-3.5"/></svg>Submit a Prayer Request</h4>
+              <textarea id="livePrayerMessage" rows="2" placeholder="Share what's on your heart..."></textarea>
+              <label>
+                <input type="checkbox" id="livePrayerPublic" checked> Share publicly with other viewers
+              </label>
+              <button class="btn btn-outline btn-sm" onclick="handleSubmitPrayerRequest()">Submit</button>
+              <p class="prayer-success" id="livePrayerSuccess">Sent. Thank you for sharing.</p>
+            </div>
+          </div>
+
+          <div class="live-chat-col">
+            <div class="comments-panel" id="liveComments"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ministry+ Upcoming banner and green room countdown, at most one of
+           these ever shows, and only when nothing is live. -->
+      <div class="live-box" id="upcomingBox" style="display:none;">
+        <div class="live-badge" style="background:rgba(232,184,74,0.14); border-color:rgba(232,184,74,0.4); color:var(--gold, #e8b84a);">Upcoming</div>
+        <h3 id="upcomingTitle"></h3>
+        <p id="upcomingWhen" style="color:var(--text-dim); margin-bottom:6px;"></p>
+        <p id="upcomingCountdownMessage" style="display:none;"></p>
+        <a id="upcomingCalendarLink" href="#" style="display:none; font-size:13px; color:var(--gold, #e8b84a); text-decoration:underline; margin-right:16px;">Subscribe to this church's stream calendar</a>
+        <a id="upcomingGoogleCalendarLink" href="#" target="_blank" rel="noopener" style="display:none; font-size:13px; color:var(--gold, #e8b84a); text-decoration:underline;">Add to Google Calendar</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="sermons">
+    <div class="container">
+      <div class="eyebrow">Sermon Library</div>
+      <h2 style="color:#fff; margin-top:14px;">Recent messages</h2>
+      <div class="sermon-grid" id="sermonGrid"></div>
+    </div>
+  </section>
+</div>
+
+<!-- SERMON WATCH MODAL -->
+<div class="media-modal-overlay" id="mediaModalOverlay">
+  <div class="media-modal">
+    <div class="media-modal-head">
+      <h3 id="mediaModalTitle">Sermon</h3>
+      <button class="media-modal-close" onclick="closeMediaModal()">&times;</button>
+    </div>
+    <div class="media-modal-body">
+      <div class="media-frame"><mux-player id="mediaModalPlayer" stream-type="on-demand"></mux-player></div>
+      <div class="action-bar" id="mediaModalActionBar"></div>
+      <div class="comments-panel" id="mediaModalComments"></div>
+    </div>
+  </div>
+</div>
+
+<!-- GIVE MODAL -->
+<div class="modal-overlay" id="giveModalOverlay">
+  <div class="modal-card">
+    <button class="modal-close" onclick="closeGiveModal()">&times;</button>
+
+    <div id="giveStep1">
+      <h2>Place a Giving</h2>
+      <p class="sub">Your gift goes straight to the church. A small platform fee applies, same as any card processor.</p>
+      <p class="sub" id="givingCapNote" style="display:none;"></p>
+      <div class="toggle-row" id="giveTypeToggleRow">
+        <button class="active" id="giveTypeOneTime" onclick="setGiveType('one')">One time</button>
+        <button id="giveTypeRecurring" onclick="setGiveType('recur')">Recurring monthly</button>
+      </div>
+      <label style="display:block; font-size:12.5px; color:var(--text-dim); margin-bottom:8px;">Amount</label>
+      <div class="amount-grid" id="amountGrid">
+        <button class="amount-btn" data-cents="1000" onclick="selectAmount(this, 1000)">$10</button>
+        <button class="amount-btn selected" data-cents="2500" onclick="selectAmount(this, 2500)">$25</button>
+        <button class="amount-btn" data-cents="5000" onclick="selectAmount(this, 5000)">$50</button>
+        <button class="amount-btn" data-cents="10000" onclick="selectAmount(this, 10000)">$100</button>
+      </div>
+      <div class="field"><label>Custom amount (optional)</label><input type="number" id="customAmount" min="1" step="1" placeholder="e.g. 75"></div>
+      <div class="field" id="giveFundRow" style="display:none;"><label>Give to</label><select id="giveFundSelect"></select></div>
+      <div class="field"><label>Note (optional)</label><input type="text" id="giveNote" placeholder="In honor of..."></div>
+      <div class="msg error" id="giveStep1Error"></div>
+      <button class="btn btn-gold btn-block" id="giveContinueBtn" onclick="handleStartGiving()">Continue</button>
+    </div>
+
+    <div id="giveStep2" style="display:none;">
+      <h2>Complete your gift</h2>
+      <p class="sub" id="giveStep2Sub"></p>
+      <div id="payment-element"></div>
+      <div class="msg error" id="giveStep2Error"></div>
+      <button class="btn btn-gold btn-block" id="givePayBtn" onclick="handleConfirmGiving()">Give Now</button>
+    </div>
+
+    <div id="giveSuccess" style="display:none; text-align:center;">
+      <h2>Thank you! 🙏</h2>
+      <p class="sub">Your gift has been sent directly to the church.</p>
+      <button class="btn btn-gold btn-block" onclick="closeGiveModal()">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- FOLLOW-TO-GIVE GATE MODAL -->
+<div class="modal-overlay" id="followGateModalOverlay">
+  <div class="modal-card" style="max-width:400px;">
+    <button class="modal-close" onclick="closeFollowGateModal()">&times;</button>
+    <h2>Follow to give</h2>
+    <p class="sub">Follow <span id="followGateChurchName">this ministry</span> to send them an offering.</p>
+    <div class="msg error" id="followGateError"></div>
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-outline" style="flex:1;" onclick="closeFollowGateModal()">Not now</button>
+      <button class="btn btn-gold" style="flex:1;" id="followGateConfirmBtn" onclick="handleFollowThenGive()">Follow &amp; Continue</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STRIPE_PUBLISHABLE_KEY = 'pk_test_51TrqcSBIMqIMpEnU1xXvWmMwUirA0ADArSb908PYH7jjms9lSQOs1qbmqNXE02fsWydflSf6hJ3lJxoOMRoXKax9009znRgMHo';
+const stripe = Stripe(STRIPE_PUBLISHABLE_KEY);
+let elements = null;
+let recurringCustomerId = null;
+
+const slug = new URLSearchParams(window.location.search).get('slug');
+let churchData = null;
+let viewerId = null;
+let selectedAmountCents = 2500;
+let giveType = 'one'; // 'one' | 'recur'
+// Set right before the give request fires — only non-null when the church
+// is genuinely live at give-time, the one context exempt from mandatory
+// giving 2FA (see lib/givingTwoFactor.js). Verified server-side either way.
+let currentGivingStreamId = null;
+
+async function init(){
+  if(!slug){
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('notFoundState').style.display = 'flex';
+    return;
+  }
+  try {
+    const res = await fetch(`/api/churches/${encodeURIComponent(slug)}`);
+    if(!res.ok){
+      document.getElementById('loadingState').style.display = 'none';
+      document.getElementById('notFoundState').style.display = 'flex';
+      return;
+    }
+    churchData = await res.json();
+    renderChurch(churchData);
+    handleDeepLink();
+  } catch(err){
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('notFoundState').style.display = 'flex';
+  }
+}
+
+// Lets a shared link (from the Share button) drop a viewer straight into the
+// sermon that was shared, or scroll them to the live player.
+function handleDeepLink(){
+  const params = new URLSearchParams(window.location.search);
+  const sermonId = params.get('sermon');
+  if(sermonId){
+    const sermon = churchData.sermons.find(s => s.id === sermonId);
+    if(sermon){ openMediaModal(sermon); return; }
+  }
+  if(params.get('watch') === 'live' && churchData.liveStream){
+    document.getElementById('liveBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function renderChurch(data){
+  document.getElementById('loadingState').style.display = 'none';
+  document.getElementById('profileContent').style.display = 'block';
+  viewerId = data.viewerId || null;
+
+  const avatarEl = document.getElementById('churchAvatar');
+  avatarEl.innerHTML = '';
+  if(data.church.pastorAvatarUrl){
+    const img = document.createElement('img');
+    img.src = data.church.pastorAvatarUrl;
+    img.alt = '';
+    avatarEl.appendChild(img);
+  } else {
+    avatarEl.textContent = data.church.name.slice(0, 2).toUpperCase();
+  }
+
+  const bannerEl = document.getElementById('profileBanner');
+  const headerSection = document.getElementById('profileHeaderSection');
+  if(data.church.bannerUrl){
+    bannerEl.style.backgroundImage = `url("${data.church.bannerUrl}")`;
+    bannerEl.style.display = 'block';
+    headerSection.classList.add('has-banner');
+  }
+
+  document.getElementById('churchName').textContent = data.church.name;
+  document.getElementById('pastorName').textContent = 'Pastor ' + data.church.pastorName;
+  document.getElementById('followerCount').textContent = data.church.followerCount.toLocaleString() + (data.church.followerCount === 1 ? ' follower' : ' followers');
+
+  if(data.church.bio){
+    const bioEl = document.getElementById('churchBio');
+    bioEl.textContent = data.church.bio;
+    bioEl.style.display = 'block';
+  }
+
+  const followBtn = document.getElementById('followBtn');
+  updateFollowButton(data.isFollowing);
+
+  const giveButtons = [document.getElementById('giveBtnHeader')];
+  if(!data.church.canReceiveGifts){
+    giveButtons.forEach(b => { b.disabled = true; b.textContent = 'Giving not yet available'; });
+  } else if(data.church.monthlyGivingRemainingCents === 0){
+    giveButtons.forEach(b => { b.disabled = true; b.textContent = 'Giving Limit Reached'; });
+  }
+
+  if(data.liveStream){
+    const stream = data.liveStream;
+    const liveBox = document.getElementById('liveBox');
+    liveBox.style.display = 'block';
+    // Marks the page as showing the full-screen mobile live view so the
+    // floating support-chat launcher (fixed bottom-right, z-index 9999)
+    // can get out of the way of the comment composer's own bottom-right
+    // give button, which now reaches the same corner.
+    document.body.classList.add('live-immersive');
+    document.getElementById('liveTitle').textContent = stream.title;
+    document.getElementById('liveDescription').textContent = stream.description || '';
+    const player = document.getElementById('livePlayer');
+    if(stream.playbackId) player.setAttribute('playback-id', stream.playbackId);
+    applyPlanResolutionCap(player, data.church);
+    applyStreamOverlay(liveBox, data.church);
+
+    buildActionBar(document.getElementById('liveActionBar'), {
+      kind: 'stream', id: stream.id, likeCount: stream.likeCount, commentCount: stream.commentCount,
+      isLiked: stream.isLiked, title: stream.title, shareUrl: buildShareUrl({ watch: 'live' }),
+    });
+    setupComments(document.getElementById('liveComments'), { kind: 'stream', id: stream.id }, true);
+    startLiveCommentPolling(stream.id);
+    startLiveView(stream.id);
+    setupLiveTapToLike();
+
+    if((data.church.features || []).includes('polls_prayer_requests')){
+      document.getElementById('livePrayerWidget').style.display = 'block';
+      startLivePollPolling(stream.id);
+    }
+  } else if(data.upcomingStream){
+    const upcoming = data.upcomingStream;
+    const upcomingBox = document.getElementById('upcomingBox');
+    upcomingBox.style.display = 'block';
+    document.getElementById('upcomingTitle').textContent = upcoming.title;
+    document.getElementById('upcomingWhen').textContent = new Date(upcoming.scheduledAt).toLocaleString(undefined, {
+      weekday: 'long', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+    });
+    const msgEl = document.getElementById('upcomingCountdownMessage');
+    if(upcoming.countdownMessage){
+      msgEl.textContent = upcoming.countdownMessage;
+      msgEl.style.display = 'block';
+    }
+    const calLink = document.getElementById('upcomingCalendarLink');
+    if((data.church.features || []).includes('calendar_sync')){
+      calLink.href = `/api/calendar/${encodeURIComponent(slug)}.ics`;
+      calLink.style.display = 'inline-block';
+
+      const gcalLink = document.getElementById('upcomingGoogleCalendarLink');
+      const start = new Date(upcoming.scheduledAt);
+      const end = new Date(start.getTime() + 60 * 60 * 1000);
+      const toGCalDate = (d) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+      const gcalParams = new URLSearchParams({
+        action: 'TEMPLATE',
+        text: upcoming.title,
+        dates: `${toGCalDate(start)}/${toGCalDate(end)}`,
+        details: `Watch live at ${window.location.origin}/church.html?slug=${slug}`,
+      });
+      gcalLink.href = `https://calendar.google.com/calendar/render?${gcalParams.toString()}`;
+      gcalLink.style.display = 'inline-block';
+    } else {
+      calLink.style.display = 'none';
+    }
+    applyStreamOverlay(upcomingBox, data.church);
+  }
+
+  renderSermonGrid(data.sermons);
+}
+
+// Built with DOM APIs (not innerHTML string interpolation) — sermon title,
+// category, and series are pastor-supplied text rendered on a public page,
+// so they must never be able to inject markup/script into a seeker's browser.
+function renderSermonGrid(sermons){
+  const grid = document.getElementById('sermonGrid');
+  grid.innerHTML = '';
+
+  if(sermons.length === 0){
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.style.gridColumn = '1/-1';
+    empty.innerHTML = '<div class="ico">🎬</div><p>No sermons published yet.</p>';
+    grid.appendChild(empty);
+    return;
+  }
+
+  sermons.forEach(s => grid.appendChild(buildSermonCard(s)));
+}
+
+function buildSermonCard(s){
+  const card = document.createElement('div');
+  card.className = 'sermon-card';
+
+  const thumb = document.createElement('div');
+  thumb.className = 'sermon-thumb';
+  thumb.addEventListener('click', () => openMediaModal(s));
+
+  if(s.thumbnailUrl){
+    const img = document.createElement('img');
+    img.src = s.thumbnailUrl;
+    img.alt = s.title;
+    thumb.appendChild(img);
+  } else {
+    thumb.append('No thumbnail');
+  }
+  const playCircle = document.createElement('div');
+  playCircle.className = 'play-circle';
+  thumb.appendChild(playCircle);
+
+  if(s.category){
+    const tag = document.createElement('span');
+    tag.className = 'tag-badge';
+    tag.textContent = s.category;
+    thumb.appendChild(tag);
+  }
+  if(s.durationSeconds){
+    const dur = document.createElement('span');
+    dur.className = 'dur-badge';
+    dur.textContent = formatDuration(s.durationSeconds);
+    thumb.appendChild(dur);
+  }
+  card.appendChild(thumb);
+
+  const info = document.createElement('div');
+  info.className = 'sermon-info';
+  const h4 = document.createElement('h4');
+  h4.textContent = s.title;
+  h4.style.cursor = 'pointer';
+  h4.addEventListener('click', () => openMediaModal(s));
+  const p = document.createElement('p');
+  p.textContent = s.series || '';
+  info.append(h4, p);
+  card.appendChild(info);
+
+  return card;
+}
+
+/* ============ VIEW TRACKING (real analytics for the pastor dashboard) ============
+   Only tracks views on this public/seeker-facing page — the pastor's own
+   preview of their content (mockup.html) intentionally isn't tracked, so a
+   pastor previewing their own sermon doesn't inflate their own view count. */
+function detectDeviceType(){
+  const ua = navigator.userAgent;
+  if(/SmartTV|Google TV|AppleTV|Roku|CrKey|Tizen|WebOS|HbbTV/i.test(ua)) return 'tv';
+  if(/Mobi|Android|iPhone|iPad|Tablet/i.test(ua)) return 'mobile';
+  return 'desktop';
+}
+
+let mediaViewEventId = null;
+let mediaViewInterval = null;
+
+async function startMediaView(sermonId){
+  stopMediaView();
+  try {
+    const res = await fetch('/api/view-events', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ sermonId, deviceType: detectDeviceType() }),
+    });
+    if(!res.ok) return;
+    const data = await res.json();
+    mediaViewEventId = data.id;
+    mediaViewInterval = setInterval(reportMediaWatchTime, 10000);
+  } catch(err){ /* view tracking is best-effort, never blocks playback */ }
+}
+
+function reportMediaWatchTime(){
+  if(!mediaViewEventId) return;
+  const player = document.getElementById('mediaModalPlayer');
+  const seconds = Math.round(player.currentTime || 0);
+  fetch('/api/view-events/' + mediaViewEventId, {
+    method: 'PATCH', headers: {'Content-Type':'application/json'}, keepalive: true,
+    body: JSON.stringify({ watchSeconds: seconds }),
+  }).catch(() => {});
+}
+
+function stopMediaView(){
+  if(mediaViewInterval){ clearInterval(mediaViewInterval); mediaViewInterval = null; }
+  if(mediaViewEventId){ reportMediaWatchTime(); mediaViewEventId = null; }
+}
+
+let liveViewEventId = null;
+let liveViewInterval = null;
+let liveViewStartedAt = null;
+
+async function startLiveView(streamId){
+  stopLiveView();
+  try {
+    const res = await fetch('/api/view-events', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ streamId, deviceType: detectDeviceType() }),
+    });
+    if(!res.ok) return;
+    const data = await res.json();
+    liveViewEventId = data.id;
+    liveViewStartedAt = Date.now();
+    liveViewInterval = setInterval(reportLiveWatchTime, 15000);
+  } catch(err){ /* view tracking is best-effort, never blocks playback */ }
+}
+
+function reportLiveWatchTime(){
+  if(!liveViewEventId) return;
+  const seconds = Math.round((Date.now() - liveViewStartedAt) / 1000);
+  fetch('/api/view-events/' + liveViewEventId, {
+    method: 'PATCH', headers: {'Content-Type':'application/json'}, keepalive: true,
+    body: JSON.stringify({ watchSeconds: seconds }),
+  }).catch(() => {});
+}
+
+function stopLiveView(){
+  if(liveViewInterval){ clearInterval(liveViewInterval); liveViewInterval = null; }
+  if(liveViewEventId){ reportLiveWatchTime(); liveViewEventId = null; liveViewStartedAt = null; }
+}
+
+window.addEventListener('beforeunload', () => {
+  stopMediaView();
+  stopLiveView();
+});
+
+// Free-plan churches are capped to 720p playback (Mux has no 720p asset
+// tier, so this is enforced here at the player rather than at encode time —
+// see lib/plans.js on the server for the full explanation).
+function applyPlanResolutionCap(player, church){
+  if(church && church.playerMaxResolution){
+    player.setAttribute('max-resolution', church.playerMaxResolution);
+  } else {
+    player.removeAttribute('max-resolution');
+  }
+}
+
+// Ministry+ "stream overlay" — a branded image frame rendered around the
+// player on this page, not composited into the actual video (true in-stream
+// compositing needs the pastor's own OBS/vMix — see lib/plans.js). Applied
+// as a background behind the box so the video itself is untouched.
+function applyStreamOverlay(box, church){
+  if(church && church.overlayImageUrl){
+    box.style.backgroundImage = `url("${church.overlayImageUrl}")`;
+    box.style.backgroundSize = 'cover';
+    box.style.backgroundPosition = 'center';
+    box.style.border = '2px solid rgba(232,184,74,0.5)';
+  } else {
+    box.style.backgroundImage = '';
+    box.style.border = '';
+  }
+}
+
+/* ============ SERMON WATCH MODAL ============ */
+function openMediaModal(sermon){
+  document.getElementById('mediaModalTitle').textContent = sermon.title;
+  const player = document.getElementById('mediaModalPlayer');
+  if(sermon.playbackId) player.setAttribute('playback-id', sermon.playbackId);
+  applyPlanResolutionCap(player, churchData && churchData.church);
+
+  buildActionBar(document.getElementById('mediaModalActionBar'), {
+    kind: 'sermon', id: sermon.id, likeCount: sermon.likeCount, commentCount: sermon.commentCount,
+    isLiked: sermon.isLiked, isFavorited: sermon.isFavorited, title: sermon.title, shareUrl: buildShareUrl({ sermon: sermon.id }),
+  });
+  setupComments(document.getElementById('mediaModalComments'), { kind: 'sermon', id: sermon.id });
+
+  document.getElementById('mediaModalOverlay').classList.add('show');
+  history.replaceState(null, '', buildShareUrl({ sermon: sermon.id }));
+  startMediaView(sermon.id);
+}
+
+function closeMediaModal(){
+  const player = document.getElementById('mediaModalPlayer');
+  if(player.pause) player.pause();
+  player.removeAttribute('playback-id');
+  document.getElementById('mediaModalOverlay').classList.remove('show');
+  history.replaceState(null, '', buildShareUrl({}));
+  stopMediaView();
+}
+
+function buildShareUrl(extraParams){
+  const url = new URL(window.location.origin + '/church.html');
+  url.searchParams.set('slug', slug);
+  Object.entries(extraParams).forEach(([k, v]) => { if(v) url.searchParams.set(k, v); });
+  return url.toString();
+}
+
+function formatDuration(seconds){
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+
+function formatRelativeTime(iso){
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if(mins < 1) return 'just now';
+  if(mins < 60) return mins + 'm ago';
+  const hours = Math.floor(mins / 60);
+  if(hours < 24) return hours + 'h ago';
+  const days = Math.floor(hours / 24);
+  if(days < 7) return days + 'd ago';
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+/* ============ ACTION BAR (like / comment / share / give) ============ */
+function buildActionBar(container, target){
+  container.innerHTML = '';
+
+  const likeBtn = document.createElement('button');
+  likeBtn.className = 'action-btn like-btn' + (target.isLiked ? ' active' : '');
+  const likeCount = document.createElement('span');
+  likeCount.className = 'count';
+  likeCount.textContent = target.likeCount;
+  likeBtn.innerHTML = '<span class="ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.5s-7-4.35-9.5-8.6C1.1 9.4 2 6.3 4.6 5.1c2.1-1 4.6-.3 6.4 1.7l1 1.1 1-1.1c1.8-2 4.3-2.7 6.4-1.7 2.6 1.2 3.5 4.3 2.1 6.8-2.5 4.25-9.5 8.6-9.5 8.6z"/></svg></span><span class="label">Like</span>';
+  likeBtn.appendChild(likeCount);
+
+  // Live streams get a TikTok-style heart burst — tap as many times as you
+  // like, but only the first tap (per page load) actually toggles the
+  // persisted like so mashing the button can't accidentally unlike it.
+  let likeEl = likeBtn;
+  if(target.kind === 'stream'){
+    const heartWrap = document.createElement('div');
+    heartWrap.className = 'heart-burst-anchor';
+    heartWrap.appendChild(likeBtn);
+    likeEl = heartWrap;
+    likeBtn.addEventListener('click', () => handleStreamHeartTap(target, likeBtn, likeCount, heartWrap));
+  } else {
+    likeBtn.addEventListener('click', () => handleToggleLike(target, likeBtn, likeCount));
+  }
+
+  const commentBtn = document.createElement('button');
+  commentBtn.className = 'action-btn';
+  const commentCount = document.createElement('span');
+  commentCount.className = 'count comment-count';
+  commentCount.textContent = target.commentCount;
+  commentBtn.innerHTML = '<span class="ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H9.8L6 20v-3.5H4A1.5 1.5 0 0 1 2.5 15V7A1.5 1.5 0 0 1 4 5.5z"/></svg></span><span class="label">Comment</span>';
+  commentBtn.appendChild(commentCount);
+  commentBtn.addEventListener('click', () => {
+    const panel = container.parentElement.querySelector('.comments-panel textarea');
+    if(panel){ panel.scrollIntoView({ behavior: 'smooth', block: 'center' }); panel.focus(); }
+  });
+
+  const shareWrap = document.createElement('div');
+  shareWrap.className = 'share-wrap';
+  const shareBtn = document.createElement('button');
+  shareBtn.className = 'action-btn';
+  shareBtn.innerHTML = '<span class="ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4.5h5.5V10"/><path d="M19.3 4.7L11 13"/><path d="M18 13.5V19a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 19V8.5A1.5 1.5 0 0 1 6 7h5.5"/></svg></span><span class="label">Share</span>';
+  shareBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleShareMenu(shareWrap, target); });
+  shareWrap.appendChild(shareBtn);
+
+  const giveBtn = document.createElement('button');
+  giveBtn.className = 'action-btn give-action';
+  giveBtn.innerHTML = '<span class="ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.2"/><line x1="12" y1="6.8" x2="12" y2="17.2"/><path d="M14.6 9.2h-3.8a1.9 1.9 0 0 0 0 3.8h2.4a1.9 1.9 0 0 1 0 3.8H9.3"/></svg></span><span class="label">Give</span>';
+  if(churchData && churchData.church && churchData.church.monthlyGivingRemainingCents === 0){
+    giveBtn.disabled = true;
+    giveBtn.style.opacity = '0.4';
+    giveBtn.title = 'This church has reached its monthly giving limit';
+  }
+  giveBtn.addEventListener('click', () => attemptGive());
+
+  // Favoriting (bookmark for later) only applies to uploaded sermons, not
+  // livestreams or posts — there's no "watch this later" concept for those.
+  if(target.kind === 'sermon'){
+    const favBtn = document.createElement('button');
+    favBtn.className = 'action-btn favorite-btn' + (target.isFavorited ? ' active' : '');
+    favBtn.innerHTML = '<span class="ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.7l2.4 4.9 5.4.6-4 3.7 1.1 5.3L12 15.5l-4.9 2.7 1.1-5.3-4-3.7 5.4-.6z"/></svg></span><span class="label">' + (target.isFavorited ? 'Favorited' : 'Favorite') + '</span>';
+    favBtn.addEventListener('click', () => handleToggleFavorite(target, favBtn));
+    container.append(likeEl, commentBtn, favBtn, shareWrap, giveBtn);
+  } else {
+    container.append(likeEl, commentBtn, shareWrap, giveBtn);
+  }
+}
+
+async function handleToggleFavorite(target, btn){
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/api/sermons/${target.id}/favorites`, { method: 'POST' });
+    if(res.status === 401){
+      alert('Please sign in to favorite this.');
+      window.location.href = '/mockup.html';
+      return;
+    }
+    if(!res.ok) return;
+    const data = await res.json();
+    target.isFavorited = data.isFavorited;
+    btn.classList.toggle('active', data.isFavorited);
+    btn.querySelector('.label').textContent = data.isFavorited ? 'Favorited' : 'Favorite';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function handleToggleLike(target, btn, countEl){
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/api/${target.kind}s/${target.id}/likes`, { method: 'POST' });
+    if(res.status === 401){
+      alert('Please sign in to like this.');
+      window.location.href = '/mockup.html';
+      return;
+    }
+    if(!res.ok) return;
+    const data = await res.json();
+    btn.classList.toggle('active', data.isLiked);
+    countEl.textContent = data.count;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Live hearts: every tap shows a floating heart immediately (no network
+// wait), but only the first tap — when the stream isn't already liked —
+// actually calls the API and moves the real count. Later taps in the same
+// visit just add more hearts to the burst so mashing the button can't
+// toggle it back off.
+function handleStreamHeartTap(target, btn, countEl, anchorEl){
+  spawnFloatingHeart(anchorEl);
+  if(target.isLiked) return;
+
+  target.isLiked = true;
+  btn.classList.add('active');
+  fetch(`/api/${target.kind}s/${target.id}/likes`, { method: 'POST' })
+    .then(res => {
+      if(res.status === 401){
+        alert('Please sign in to like this.');
+        window.location.href = '/mockup.html';
+        return null;
+      }
+      if(!res.ok) throw new Error('like failed');
+      return res.json();
+    })
+    .then(data => {
+      if(data) countEl.textContent = data.count;
+    })
+    .catch(() => {
+      target.isLiked = false;
+      btn.classList.remove('active');
+    });
+}
+
+function spawnFloatingHeart(anchorEl){
+  const heart = document.createElement('span');
+  heart.className = 'floating-heart';
+  heart.textContent = '❤️';
+  heart.style.setProperty('--drift', Math.round(Math.random() * 60 - 30) + 'px');
+  heart.style.left = (40 + Math.random() * 20) + '%';
+  heart.style.fontSize = Math.round(16 + Math.random() * 12) + 'px';
+  heart.style.animationDuration = (1.1 + Math.random() * 0.5).toFixed(2) + 's';
+  anchorEl.appendChild(heart);
+  heart.addEventListener('animationend', () => heart.remove());
+}
+
+/* ---- share popover ---- */
+function toggleShareMenu(wrap, target){
+  const existing = wrap.querySelector('.share-menu');
+  if(existing){
+    existing.remove();
+    document.removeEventListener('click', closeShareMenusOnOutsideClick);
+    return;
+  }
+  closeAllShareMenus();
+
+  const shareText = target.title ? `Watch "${target.title}" on GospelGoLive` : 'Watch on GospelGoLive';
+  const url = target.shareUrl;
+
+  const items = [];
+  if(navigator.share){
+    items.push(['📤', 'Share…', () => navigator.share({ title: shareText, url }).catch(() => {})]);
+  }
+  items.push(['🔗', 'Copy link', () => copyShareLink(url)]);
+  items.push(['🐦', 'Share to X / Twitter', () => window.open(`https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(shareText)}`, '_blank', 'noopener')]);
+  items.push(['📘', 'Share to Facebook', () => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, '_blank', 'noopener')]);
+  items.push(['💬', 'Share to WhatsApp', () => window.open(`https://wa.me/?text=${encodeURIComponent(shareText + ' ' + url)}`, '_blank', 'noopener')]);
+
+  const menu = document.createElement('div');
+  menu.className = 'share-menu show';
+  items.forEach(([icon, label, handler]) => {
+    const btn = document.createElement('button');
+    const iconSpan = document.createElement('span');
+    iconSpan.textContent = icon;
+    const labelSpan = document.createElement('span');
+    labelSpan.textContent = label;
+    btn.append(iconSpan, labelSpan);
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      handler();
+      trackShare(target);
+      menu.remove();
+    });
+    menu.appendChild(btn);
+  });
+
+  wrap.appendChild(menu);
+  setTimeout(() => document.addEventListener('click', closeShareMenusOnOutsideClick), 0);
+}
+function closeAllShareMenus(){
+  document.querySelectorAll('.share-menu').forEach(m => m.remove());
+}
+function closeShareMenusOnOutsideClick(e){
+  if(!e.target.closest('.share-wrap')){
+    closeAllShareMenus();
+    document.removeEventListener('click', closeShareMenusOnOutsideClick);
+  }
+}
+function copyShareLink(url){
+  navigator.clipboard.writeText(url).then(() => {
+    alert('Link copied!');
+  }).catch(() => {
+    prompt('Copy this link:', url);
+  });
+}
+
+// Counts a completed share — fired once a seeker actually picks a
+// destination (copy link, a social intent, or the native share sheet),
+// not merely on opening the popover. Best-effort; failures are silent
+// since this is a secondary metric, not something the user needs to see fail.
+function trackShare(target){
+  fetch(`/api/${target.kind}s/${target.id}/share`, { method: 'POST' }).catch(() => {});
+}
+
+/* ============ COMMENTS ============ */
+// chronological=true (used for the live chat sidebar) renders oldest-first
+// with newest at the bottom and auto-scrolls there, like a live chat feed.
+// Every other caller (the on-demand sermon modal) keeps the default
+// newest-first order.
+async function setupComments(container, target, chronological){
+  container.innerHTML = '';
+
+  const heading = document.createElement('h4');
+  heading.textContent = 'Comments';
+  container.appendChild(heading);
+
+  const listEl = document.createElement('div');
+  listEl.className = 'comment-list';
+
+  const form = document.createElement('div');
+  form.className = 'comment-form';
+  const textarea = document.createElement('textarea');
+  textarea.placeholder = viewerId ? 'Add a comment…' : 'Sign in to comment';
+  textarea.rows = 1;
+  const postBtn = document.createElement('button');
+  postBtn.className = 'btn btn-gold btn-sm';
+  postBtn.textContent = 'Post';
+  postBtn.addEventListener('click', () => handlePostComment(target, textarea, listEl, container, chronological));
+  // Enter sends the comment; Shift+Enter still inserts a newline.
+  textarea.addEventListener('keydown', (e) => {
+    if(e.key === 'Enter' && !e.shiftKey){
+      e.preventDefault();
+      postBtn.click();
+    }
+  });
+
+  // Live chat only: like + give sit right in the composer so a viewer never
+  // has to leave the chat to react or support the stream.
+  if(chronological && target.kind === 'stream'){
+    const chatLikeBtn = document.createElement('button');
+    chatLikeBtn.type = 'button';
+    chatLikeBtn.className = 'comment-tool-btn chat-like-btn';
+    chatLikeBtn.title = 'Send a heart';
+    chatLikeBtn.innerHTML = '♥';
+    chatLikeBtn.addEventListener('click', () => handleChatHeartTap(container));
+
+    const chatGiveBtn = document.createElement('button');
+    chatGiveBtn.type = 'button';
+    chatGiveBtn.className = 'comment-tool-btn chat-give-btn';
+    chatGiveBtn.title = 'Give';
+    chatGiveBtn.innerHTML = '◈';
+    if(churchData && churchData.church && churchData.church.monthlyGivingRemainingCents === 0){
+      chatGiveBtn.disabled = true;
+      chatGiveBtn.style.opacity = '0.4';
+      chatGiveBtn.title = 'This church has reached its monthly giving limit';
+    }
+    chatGiveBtn.addEventListener('click', () => attemptGive());
+
+    form.append(textarea, chatLikeBtn, chatGiveBtn, postBtn);
+  } else {
+    form.append(textarea, postBtn);
+  }
+
+  listEl.innerHTML = '<p class="comment-empty">Loading comments…</p>';
+  // Chat-style: scrollable log on top, composer pinned below it. The
+  // on-demand sermon modal keeps its original composer-above-list order.
+  if(chronological) container.append(listEl, form);
+  else container.append(form, listEl);
+
+  try {
+    const res = await fetch(`/api/${target.kind}s/${target.id}/comments`);
+    const data = await res.json();
+    renderCommentList(listEl, data.comments || [], target, chronological);
+  } catch(err){
+    listEl.innerHTML = '<p class="comment-empty">Could not load comments.</p>';
+  }
+}
+
+function renderCommentList(listEl, comments, target, chronological){
+  listEl.innerHTML = '';
+  if(comments.length === 0){
+    const empty = document.createElement('p');
+    empty.className = 'comment-empty';
+    empty.textContent = 'No comments yet. Be the first to share a word of encouragement.';
+    listEl.appendChild(empty);
+    return;
+  }
+  // The API returns newest-first; chat mode wants oldest-first with the
+  // newest message visible at the bottom, so reverse and scroll down.
+  const ordered = chronological ? [...comments].reverse() : comments;
+  ordered.forEach(c => listEl.appendChild(buildCommentItem(c, target)));
+  if(chronological) listEl.scrollTop = listEl.scrollHeight;
+}
+
+function buildCommentItem(c, target){
+  const item = document.createElement('div');
+  item.className = 'comment-item';
+
+  const avatar = document.createElement('div');
+  avatar.className = 'comment-avatar';
+  avatar.textContent = c.authorName.slice(0, 2).toUpperCase();
+
+  const body = document.createElement('div');
+  body.className = 'comment-body';
+
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  const b = document.createElement('b');
+  b.textContent = c.authorName;
+  const time = document.createElement('span');
+  time.textContent = formatRelativeTime(c.createdAt);
+  meta.append(b, time);
+  if(viewerId && c.authorId === viewerId){
+    const del = document.createElement('button');
+    del.className = 'comment-delete';
+    del.textContent = 'Delete';
+    del.addEventListener('click', () => handleDeleteComment(c.id, item));
+    meta.appendChild(del);
+  }
+
+  const p = document.createElement('p');
+  p.textContent = c.body;
+
+  const footer = document.createElement('div');
+  footer.className = 'comment-footer';
+  const likeBtn = document.createElement('button');
+  likeBtn.className = 'comment-like-btn' + (c.isLiked ? ' liked' : '');
+  likeBtn.innerHTML = `<span class="ico"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.5s-7-4.35-9.5-8.6C1.1 9.4 2 6.3 4.6 5.1c2.1-1 4.6-.3 6.4 1.7l1 1.1 1-1.1c1.8-2 4.3-2.7 6.4-1.7 2.6 1.2 3.5 4.3 2.1 6.8-2.5 4.25-9.5 8.6-9.5 8.6z"/></svg></span><span class="count">${c.likeCount || 0}</span>`;
+  likeBtn.addEventListener('click', () => handleToggleCommentLike(c.id, likeBtn));
+  footer.appendChild(likeBtn);
+
+  body.append(meta, p, footer);
+  item.append(avatar, body);
+  return item;
+}
+
+async function handleToggleCommentLike(commentId, btn){
+  if(!viewerId){
+    window.location.href = '/mockup.html';
+    return;
+  }
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/api/comments/${commentId}/like`, { method: 'POST' });
+    if(res.status === 401){
+      window.location.href = '/mockup.html';
+      return;
+    }
+    if(!res.ok) return;
+    const data = await res.json();
+    btn.classList.toggle('liked', data.isLiked);
+    btn.querySelector('.count').textContent = data.count;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function handlePostComment(target, textarea, listEl, panelContainer, chronological){
+  if(!viewerId){
+    window.location.href = '/mockup.html';
+    return;
+  }
+  const body = textarea.value.trim();
+  if(!body) return;
+  const postBtn = textarea.nextElementSibling;
+  if(postBtn) postBtn.disabled = true;
+  try {
+    const res = await fetch(`/api/${target.kind}s/${target.id}/comments`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ body }),
+    });
+    if(res.status === 401){
+      alert('Please sign in to comment.');
+      window.location.href = '/mockup.html';
+      return;
+    }
+    if(!res.ok) return;
+    const data = await res.json();
+    textarea.value = '';
+    if(listEl.querySelector('.comment-empty')) listEl.innerHTML = '';
+    const item = buildCommentItem(data.comment, target);
+    if(chronological){
+      listEl.appendChild(item);
+      listEl.scrollTop = listEl.scrollHeight;
+    } else {
+      listEl.insertBefore(item, listEl.firstChild);
+    }
+    // Comments and the action bar live in separate columns for the live
+    // chat sidebar now, so walk up to the shared ancestor rather than
+    // assuming they're direct siblings.
+    const scope = panelContainer.closest('.live-box, .media-modal-body') || panelContainer.parentElement;
+    const countEl = scope.querySelector('.action-bar .comment-count');
+    if(countEl) countEl.textContent = String(parseInt(countEl.textContent || '0', 10) + 1);
+  } finally {
+    if(postBtn) postBtn.disabled = false;
+  }
+}
+
+async function handleDeleteComment(commentId, itemEl){
+  if(!confirm('Delete this comment?')) return;
+  try {
+    const res = await fetch(`/api/comments/${commentId}`, { method: 'DELETE' });
+    if(!res.ok) return;
+    const panelContainer = itemEl.closest('.comments-panel');
+    itemEl.remove();
+    const countEl = panelContainer && panelContainer.parentElement.querySelector('.action-bar .comment-count');
+    if(countEl) countEl.textContent = String(Math.max(0, parseInt(countEl.textContent || '0', 10) - 1));
+    if(panelContainer && panelContainer.querySelector('.comment-list').children.length === 0){
+      renderCommentList(panelContainer.querySelector('.comment-list'), [], null);
+    }
+  } catch(err){}
+}
+
+function updateFollowButton(isFollowing){
+  const btn = document.getElementById('followBtn');
+  btn.classList.toggle('following', isFollowing);
+  btn.textContent = isFollowing ? 'Following' : 'Follow';
+}
+
+async function handleFollowToggle(){
+  const btn = document.getElementById('followBtn');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/follows/toggle', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ churchSlug: slug }),
+    });
+    if(res.status === 401){
+      alert('Please sign in to follow this church.');
+      window.location.href = '/mockup.html';
+      return;
+    }
+    if(res.ok){
+      const data = await res.json();
+      updateFollowButton(data.following);
+      churchData.church.followerCount += data.following ? 1 : -1;
+      document.getElementById('followerCount').textContent = churchData.church.followerCount.toLocaleString() + (churchData.church.followerCount === 1 ? ' follower' : ' followers');
+    }
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* ---- give modal ---- */
+// Seekers can only give to churches they follow — this gate runs in front of
+// every give button (header + per-video action bars) and, if the viewer
+// isn't following yet, offers to follow them in-place before continuing.
+function attemptGive(){
+  if(churchData && churchData.isFollowing){
+    openGiveModal();
+  } else {
+    openFollowGateModal();
+  }
+}
+function openGiveModal(){
+  document.getElementById('giveModalOverlay').classList.add('show');
+  document.getElementById('giveStep1').style.display = 'block';
+  document.getElementById('giveStep2').style.display = 'none';
+  document.getElementById('giveSuccess').style.display = 'none';
+
+  const church = churchData && churchData.church;
+  const toggleRow = document.getElementById('giveTypeToggleRow');
+  const amountGrid = document.getElementById('amountGrid');
+  const customAmountField = document.getElementById('customAmount').closest('.field');
+  const noteField = document.getElementById('giveNote').closest('.field');
+  const fundRow = document.getElementById('giveFundRow');
+  const continueBtn = document.getElementById('giveContinueBtn');
+  const capNote = document.getElementById('givingCapNote');
+
+  const remaining = church ? church.monthlyGivingRemainingCents : null;
+  const capReached = remaining !== null && remaining !== undefined && remaining <= 0;
+
+  // Definitive gate, regardless of which entry point the seeker clicked
+  // through: once the church's monthly giving cap is fully used, the whole
+  // form is turned off rather than letting them fill it out and only find
+  // out at submission that it would be rejected.
+  if(capReached){
+    capNote.textContent = "This church has reached its monthly giving limit. Giving reopens next month.";
+    capNote.style.display = 'block';
+    toggleRow.style.display = 'none';
+    amountGrid.style.display = 'none';
+    customAmountField.style.display = 'none';
+    noteField.style.display = 'none';
+    fundRow.style.display = 'none';
+    continueBtn.disabled = true;
+    continueBtn.textContent = 'Giving Limit Reached';
+    return;
+  }
+  continueBtn.disabled = false;
+  continueBtn.textContent = 'Continue';
+  amountGrid.style.display = '';
+  customAmountField.style.display = '';
+  noteField.style.display = '';
+
+  if(church && !church.allowRecurringGiving){
+    toggleRow.style.display = 'none';
+    setGiveType('one');
+  } else {
+    toggleRow.style.display = '';
+  }
+
+  if(remaining !== null && remaining !== undefined){
+    capNote.textContent = `This church can receive $${(remaining / 100).toFixed(2)} more in gifts this month.`;
+    capNote.style.display = 'block';
+  } else {
+    capNote.style.display = 'none';
+  }
+  document.querySelectorAll('#amountGrid .amount-btn').forEach(btn => {
+    const overCap = (remaining !== null && remaining !== undefined) && Number(btn.dataset.cents) > remaining;
+    btn.disabled = overCap;
+    btn.style.opacity = overCap ? '0.4' : '';
+  });
+
+  // Ministry+ giving funds. Hidden entirely for churches with no funds set
+  // up, gifts just go to the church's general account, same as before.
+  const fundSelect = document.getElementById('giveFundSelect');
+  const funds = church?.givingFunds || [];
+  if(funds.length > 0){
+    // Built with DOM APIs — fund name is pastor-supplied text, so it must
+    // never reach innerHTML raw.
+    fundSelect.innerHTML = '';
+    funds.forEach(f => {
+      const option = document.createElement('option');
+      option.value = f.id;
+      option.textContent = f.name;
+      option.selected = Boolean(f.isDefault);
+      fundSelect.appendChild(option);
+    });
+    fundRow.style.display = 'block';
+  } else {
+    fundRow.style.display = 'none';
+  }
+}
+function closeGiveModal(){
+  document.getElementById('giveModalOverlay').classList.remove('show');
+}
+
+function openFollowGateModal(){
+  document.getElementById('followGateChurchName').textContent = churchData?.church?.name || 'this ministry';
+  document.getElementById('followGateError').style.display = 'none';
+  document.getElementById('followGateModalOverlay').classList.add('show');
+}
+function closeFollowGateModal(){
+  document.getElementById('followGateModalOverlay').classList.remove('show');
+}
+async function handleFollowThenGive(){
+  const btn = document.getElementById('followGateConfirmBtn');
+  const errorEl = document.getElementById('followGateError');
+  errorEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Following…';
+  try {
+    const res = await fetch('/api/follows/toggle', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ churchSlug: slug }),
+    });
+    if(res.status === 401){
+      alert('Please sign in to follow this church.');
+      window.location.href = '/mockup.html';
+      return;
+    }
+    if(!res.ok){
+      errorEl.textContent = 'Could not follow this church. Please try again.';
+      errorEl.style.display = 'block';
+      return;
+    }
+    const data = await res.json();
+    if(data.following){
+      churchData.isFollowing = true;
+      updateFollowButton(true);
+      churchData.church.followerCount += 1;
+      document.getElementById('followerCount').textContent = churchData.church.followerCount.toLocaleString() + (churchData.church.followerCount === 1 ? ' follower' : ' followers');
+      closeFollowGateModal();
+      openGiveModal();
+    }
+  } catch(err){
+    errorEl.textContent = 'Could not reach the server. Please try again.';
+    errorEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Follow & Continue';
+  }
+}
+function setGiveType(type){
+  giveType = type;
+  document.getElementById('giveTypeOneTime').classList.toggle('active', type === 'one');
+  document.getElementById('giveTypeRecurring').classList.toggle('active', type === 'recur');
+}
+function selectAmount(btn, cents){
+  document.querySelectorAll('.amount-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedAmountCents = cents;
+  document.getElementById('customAmount').value = '';
+}
+document.getElementById('customAmount').addEventListener('input', (e) => {
+  const val = parseFloat(e.target.value);
+  if(val > 0){
+    document.querySelectorAll('.amount-btn').forEach(b => b.classList.remove('selected'));
+    selectedAmountCents = Math.round(val * 100);
+  }
+});
+
+async function handleStartGiving(){
+  const errorEl = document.getElementById('giveStep1Error');
+  errorEl.style.display = 'none';
+
+  if(selectedAmountCents < 100){
+    errorEl.textContent = 'Minimum gift is $1.';
+    errorEl.style.display = 'block';
+    return;
+  }
+
+  // Mandatory giving 2FA has one exception: a real live stream happening
+  // right now. That context skips the code entirely, but still gets a
+  // plain "are you sure" — spontaneous in-service giving shouldn't be
+  // blocked on a code, but also shouldn't fire on a stray tap.
+  currentGivingStreamId = (churchData && churchData.liveStream) ? churchData.liveStream.id : null;
+  if(currentGivingStreamId){
+    const proceed = TwoFactor.confirmLiveGiving(selectedAmountCents, churchData.church.name);
+    if(!proceed) return;
+  }
+
+  const btn = document.getElementById('giveContinueBtn');
+  btn.disabled = true;
+  btn.textContent = 'Preparing…';
+
+  const note = document.getElementById('giveNote').value;
+  const fundRow = document.getElementById('giveFundRow');
+  const fundId = fundRow.style.display !== 'none' ? document.getElementById('giveFundSelect').value : undefined;
+
+  try {
+    if(giveType === 'one'){
+      const { res, data } = await TwoFactor.postGiving('/api/donations/intent', {
+        churchSlug: slug, amountCents: selectedAmountCents, note, fundId, streamId: currentGivingStreamId || undefined,
+      });
+      if(!res.ok){
+        errorEl.textContent = data.error || 'Something went wrong.';
+        errorEl.style.display = 'block';
+        return;
+      }
+      elements = stripe.elements({ clientSecret: data.clientSecret });
+    } else {
+      // Recurring: stripe.confirmSetup() requires a real clientSecret (it
+      // throws "You must pass in a clientSecret" without one) — create a
+      // real SetupIntent server-side first, same as the one-time path above
+      // does for its PaymentIntent.
+      const setupRes = await fetch('/api/donations/setup-intent', { method: 'POST' });
+      const setupData = await setupRes.json();
+      if(!setupRes.ok){
+        errorEl.textContent = setupData.error || 'Something went wrong.';
+        errorEl.style.display = 'block';
+        return;
+      }
+      recurringCustomerId = setupData.customerId;
+      elements = stripe.elements({ clientSecret: setupData.clientSecret });
+    }
+
+    const paymentElement = elements.create('payment');
+    paymentElement.mount('#payment-element');
+
+    document.getElementById('giveStep2Sub').textContent =
+      (giveType === 'one' ? `Giving ${formatMoney(selectedAmountCents)} once` : `Giving ${formatMoney(selectedAmountCents)} every month`);
+    document.getElementById('giveStep1').style.display = 'none';
+    document.getElementById('giveStep2').style.display = 'block';
+  } catch(err){
+    errorEl.textContent = 'Could not reach the server. Please try again.';
+    errorEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Continue';
+  }
+}
+
+async function handleConfirmGiving(){
+  const errorEl = document.getElementById('giveStep2Error');
+  errorEl.style.display = 'none';
+  const btn = document.getElementById('givePayBtn');
+  btn.disabled = true;
+  btn.textContent = 'Processing…';
+
+  try {
+    if(giveType === 'one'){
+      const { error } = await stripe.confirmPayment({
+        elements,
+        confirmParams: { return_url: window.location.href },
+        redirect: 'if_required',
+      });
+      if(error){
+        errorEl.textContent = error.message || 'Payment failed.';
+        errorEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Give Now';
+        return;
+      }
+    } else {
+      const { setupIntent, error } = await stripe.confirmSetup({
+        elements,
+        confirmParams: { return_url: window.location.href },
+        redirect: 'if_required',
+      });
+      if(error){
+        errorEl.textContent = error.message || 'Card setup failed.';
+        errorEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Give Now';
+        return;
+      }
+
+      const note = document.getElementById('giveNote').value;
+      const fundRow = document.getElementById('giveFundRow');
+      const fundId = fundRow.style.display !== 'none' ? document.getElementById('giveFundSelect').value : undefined;
+      const { res: subRes, data: subData } = await TwoFactor.postGiving('/api/donations/subscription', {
+        churchSlug: slug,
+        amountCents: selectedAmountCents,
+        paymentMethodId: setupIntent.payment_method,
+        customerId: recurringCustomerId,
+        note,
+        fundId,
+        streamId: currentGivingStreamId || undefined,
+      });
+      if(!subRes.ok){
+        errorEl.textContent = subData.error || 'Failed to start recurring gift.';
+        errorEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Give Now';
+        return;
+      }
+    }
+
+    document.getElementById('giveStep2').style.display = 'none';
+    document.getElementById('giveSuccess').style.display = 'block';
+  } catch(err){
+    errorEl.textContent = 'Something went wrong. Please try again.';
+    errorEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Give Now';
+  }
+}
+
+function formatMoney(cents){
+  return '$' + (cents/100).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+/* ============ LIVE CHAT (all plans) ============ */
+let liveCommentStreamId = null;
+let liveCommentInterval = null;
+// null = not yet initialized for this stream. On the first poll we just
+// record whatever gifts already exist (no replay-animating old history);
+// only gifts that show up in later polls actually trigger the celebration.
+let seenGiftIds = null;
+
+function startLiveCommentPolling(streamId){
+  liveCommentStreamId = streamId;
+  seenGiftIds = null;
+  if(liveCommentInterval) clearInterval(liveCommentInterval);
+  liveCommentInterval = setInterval(refreshLiveComments, 5000);
+}
+
+async function refreshLiveComments(){
+  if(!liveCommentStreamId) return;
+  const panel = document.getElementById('liveComments');
+  const listEl = panel && panel.querySelector('.comment-list');
+  if(!listEl) return;
+  try {
+    const res = await fetch(`/api/streams/${liveCommentStreamId}/comments`);
+    if(!res.ok) return;
+    const data = await res.json();
+    renderCommentList(listEl, data.comments || [], { kind: 'stream', id: liveCommentStreamId }, true);
+    handleGiftFeed(panel, data.gifts || []);
+  } catch(err) { /* leave last-known list on a transient failure */ }
+}
+
+function handleGiftFeed(panel, gifts){
+  if(seenGiftIds === null){
+    seenGiftIds = new Set(gifts.map(g => g.id));
+    return;
+  }
+  // Oldest-first so a burst of gifts celebrates in the order they happened.
+  gifts.filter(g => !seenGiftIds.has(g.id)).reverse().forEach(g => {
+    seenGiftIds.add(g.id);
+    spawnChatGiftCelebration(panel, `${g.giverName} just gave!`);
+  });
+}
+
+/* ---- chat reaction fx: hearts + gift celebrations flow up through the
+   live chat panel itself, not just above the action bar button ---- */
+function getChatFxLayer(panelEl){
+  let layer = panelEl.querySelector('.chat-fx-layer');
+  if(!layer){
+    layer = document.createElement('div');
+    layer.className = 'chat-fx-layer';
+    panelEl.appendChild(layer);
+  }
+  return layer;
+}
+
+function handleChatHeartTap(panelEl){
+  spawnChatHeart(panelEl);
+  // Reuse the action bar's real like button so persistence + the
+  // once-per-viewer toggle guard stay single-sourced.
+  const actionLikeBtn = document.querySelector('#liveActionBar .heart-burst-anchor button');
+  if(actionLikeBtn) actionLikeBtn.click();
+}
+
+function spawnChatHeart(panelEl){
+  const layer = getChatFxLayer(panelEl);
+  const heart = document.createElement('span');
+  heart.className = 'chat-floating-heart';
+  heart.textContent = '❤️';
+  heart.style.setProperty('--drift', Math.round(Math.random() * 80 - 40) + 'px');
+  heart.style.left = (30 + Math.random() * 40) + '%';
+  heart.style.fontSize = Math.round(18 + Math.random() * 14) + 'px';
+  heart.style.animationDuration = (1.9 + Math.random() * 0.7).toFixed(2) + 's';
+  layer.appendChild(heart);
+  heart.addEventListener('animationend', () => heart.remove());
+}
+
+function spawnChatGiftCelebration(panelEl, label){
+  const layer = getChatFxLayer(panelEl);
+  const burst = document.createElement('div');
+  burst.className = 'chat-gift-burst';
+  burst.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v6"/><path d="M9 3.5c-1.5 1-2.5 3-2.5 5.5 0 4 1.5 7 3.5 9.5"/><path d="M15 3.5c1.5 1 2.5 3 2.5 5.5 0 4-1.5 7-3.5 9.5"/><path d="M9 9c0 2 1.2 3.5 3 3.5s3-1.5 3-3.5"/></svg>';
+  const caption = document.createElement('span');
+  caption.textContent = '🙏 ' + label;
+  burst.appendChild(caption);
+  layer.appendChild(burst);
+  burst.addEventListener('animationend', () => burst.remove());
+}
+
+// Mobile immersive view only: tapping anywhere on the full-screen video
+// fires the same heart-burst-and-like as the chat heart button, with the
+// heart spawning right where the viewer tapped.
+function setupLiveTapToLike(){
+  const layer = document.getElementById('liveTapLayer');
+  if(!layer || layer.dataset.bound) return;
+  layer.dataset.bound = '1';
+  layer.addEventListener('click', (e) => {
+    spawnTapHeart(layer, e.clientX, e.clientY);
+    const actionLikeBtn = document.querySelector('#liveActionBar .heart-burst-anchor button');
+    if(actionLikeBtn) actionLikeBtn.click();
+  });
+}
+
+function spawnTapHeart(layer, x, y){
+  const rect = layer.getBoundingClientRect();
+  const heart = document.createElement('span');
+  heart.className = 'tap-heart';
+  heart.textContent = '❤️';
+  heart.style.left = (x - rect.left) + 'px';
+  heart.style.top = (y - rect.top) + 'px';
+  heart.style.setProperty('--drift', Math.round(Math.random() * 80 - 40) + 'px');
+  heart.style.fontSize = Math.round(28 + Math.random() * 16) + 'px';
+  layer.appendChild(heart);
+  heart.addEventListener('animationend', () => heart.remove());
+}
+
+/* ============ LIVE POLL (Ministry+) ============ */
+let livePollStreamId = null;
+let livePollInterval = null;
+
+function startLivePollPolling(streamId){
+  livePollStreamId = streamId;
+  refreshLivePoll();
+  if(livePollInterval) clearInterval(livePollInterval);
+  livePollInterval = setInterval(refreshLivePoll, 5000);
+}
+
+async function refreshLivePoll(){
+  if(!livePollStreamId) return;
+  try {
+    const res = await fetch(`/api/streams/${livePollStreamId}/polls`);
+    if(!res.ok) return;
+    const data = await res.json();
+    renderLivePoll(data.poll);
+  } catch(err) { /* leave last-known state on a transient failure */ }
+}
+
+function renderLivePoll(poll){
+  const widget = document.getElementById('livePollWidget');
+  if(!poll){ widget.style.display = 'none'; return; }
+  widget.style.display = 'block';
+  document.getElementById('livePollQuestion').textContent = poll.question;
+
+  const total = poll.totalResponses || 0;
+  const optionsEl = document.getElementById('livePollOptions');
+
+  if(!poll.myResponse){
+    optionsEl.className = 'poll-options';
+    optionsEl.innerHTML = poll.options.map(opt =>
+      `<button class="poll-option-btn" onclick="handleVotePoll('${poll.id}', this)" data-option="${opt.replace(/"/g,'&quot;')}">${opt}</button>`
+    ).join('');
+    document.getElementById('livePollVotedNote').style.display = 'none';
+    return;
+  }
+
+  // Once voted, show results as bars — the leading answer(s) get the gold
+  // "in the lead" treatment, everything else stays teal.
+  const maxCount = Math.max(0, ...poll.options.map(opt => poll.counts[opt] || 0));
+  optionsEl.className = 'poll-results';
+  optionsEl.innerHTML = poll.options.map(opt => {
+    const count = poll.counts[opt] || 0;
+    const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+    const isMine = poll.myResponse === opt;
+    const isLeading = maxCount > 0 && count === maxCount;
+    return `
+      <div class="poll-result-row${isLeading ? ' leading' : ''}">
+        <div class="poll-result-label">
+          <span>${opt}${isMine ? ' <span class="mine">(your vote)</span>' : ''}${isLeading ? ' 🏆' : ''}</span>
+          <span>${pct}% · ${count}</span>
+        </div>
+        <div class="poll-result-track"><div class="poll-result-fill${isLeading ? ' leading' : ''}" style="width:${pct}%"></div></div>
+      </div>`;
+  }).join('');
+  document.getElementById('livePollVotedNote').style.display = 'block';
+}
+
+async function handleVotePoll(pollId, btn){
+  const selectedOption = btn.dataset.option;
+  try {
+    const res = await fetch(`/api/streams/${livePollStreamId}/polls/${pollId}/respond`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ selectedOption }),
+    });
+    if(res.status === 401){
+      alert('Please sign in to vote.');
+      return;
+    }
+    refreshLivePoll();
+  } catch(err) { /* transient failure — the poll will just show the prior state */ }
+}
+
+/* ============ PRAYER REQUESTS (Ministry+) ============ */
+async function handleSubmitPrayerRequest(){
+  const message = document.getElementById('livePrayerMessage').value.trim();
+  if(!message) return;
+  const isPublic = document.getElementById('livePrayerPublic').checked;
+  try {
+    const res = await fetch(`/api/streams/${livePollStreamId || churchData.liveStream.id}/prayer-requests`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ message, isPublic }),
+    });
+    if(res.status === 401){
+      alert('Please sign in to submit a prayer request.');
+      return;
+    }
+    if(!res.ok) return;
+    document.getElementById('livePrayerMessage').value = '';
+    const successEl = document.getElementById('livePrayerSuccess');
+    successEl.style.display = 'block';
+    setTimeout(() => { successEl.style.display = 'none'; }, 4000);
+  } catch(err) { /* leave the message in the box so the viewer can retry */ }
+}
+
+init();
+</script>
+<script src="/two-factor.js" defer></script>
+<script src="/support-chat.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,994 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Pooled connection (Supabase's pgbouncer transaction pooler) — used at runtime.
+  url       = env("DATABASE_URL")
+  // Unpooled connection — required by `prisma migrate` since pgbouncer's
+  // transaction mode doesn't support the advisory locks migrations rely on.
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  pastor
+  seeker
+  admin
+}
+
+enum ChurchPlan {
+  starter
+  ministry
+  congregation
+}
+
+enum SermonStatus {
+  processing
+  ready
+  failed
+}
+
+enum StreamStatus {
+  idle
+  live
+  ended
+}
+
+enum TokenPurpose {
+  email_verify
+  password_reset
+}
+
+enum Religion {
+  christianity
+  islam
+  hinduism
+  buddhism
+  sikhism
+  judaism
+}
+
+enum NotificationType {
+  post
+  sermon
+  live
+  donation
+  like
+  scheduled
+}
+
+enum SimulcastPlatform {
+  youtube
+  facebook
+}
+
+enum BusinessType {
+  individual
+  non_profit
+}
+
+enum ModerationStatus {
+  clean
+  pending_review
+  removed
+  blocked
+}
+
+enum ReportContentType {
+  sermon
+  stream
+  chat_message
+  profile
+}
+
+enum ReportCategory {
+  csam
+  nudity
+  violence
+  fraud_suspicion
+  spam
+  other
+  copyright
+}
+
+enum DmcaNoticeStatus {
+  valid
+  counter_noticed
+  restored
+  invalid
+}
+
+enum DetectionSource {
+  automated
+  user_report
+}
+
+enum ReportStatus {
+  pending
+  under_review
+  actioned
+  dismissed
+}
+
+// ============ USERS & AUTH ============
+model User {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email         String   @unique
+  // Nullable — social-only accounts (Google/Twitter) never set a password;
+  // /api/auth/signin's DUMMY_HASH fallback already treats null the same as
+  // "no such user", so a password sign-in attempt on one just fails cleanly.
+  passwordHash  String?  @map("password_hash")
+  role          UserRole
+  fullName      String   @map("full_name")
+  avatarUrl     String?  @map("avatar_url")
+  emailVerified Boolean  @default(false) @map("email_verified")
+  googleId      String?  @unique @map("google_id")
+  twitterId     String?  @unique @map("twitter_id")
+  // Not in the original schema — TOTP two-factor auth (lib/twoFactor.js).
+  // Mandatory for every pastor account regardless of sign-in method
+  // (password or OAuth); optional for seekers until they attempt to give
+  // outside a live stream, at which point it's required before the gift can
+  // go through (see lib/givingTwoFactor.js). totpSecret is set as soon as
+  // setup starts but totpEnabled only flips true once the pastor/seeker
+  // proves they can generate a valid code — an unconfirmed secret never
+  // grants access. Backup codes are hashed (bcrypt, same as passwords) and
+  // each is single-use, removed from the array once redeemed.
+  totpSecret       String?  @map("totp_secret")
+  totpEnabled      Boolean  @default(false) @map("totp_enabled")
+  totpBackupCodes  String[] @default([]) @map("totp_backup_codes")
+  // Alternative second factor: a phone number verified via a texted code
+  // instead of an authenticator app. twoFactorMethod records which one this
+  // account uses ('totp' or 'sms') once enrollment is confirmed; totpEnabled
+  // above still means "2FA is enabled", regardless of which method. The SMS
+  // code itself is short-lived (see lib/twoFactor.js's SMS_CODE_TTL_MINUTES)
+  // and hashed the same way as backup codes, never stored in plain text.
+  phoneNumber      String?   @map("phone_number")
+  twoFactorMethod  String?   @map("two_factor_method")
+  smsCodeHash      String?   @map("sms_code_hash")
+  smsCodeExpiresAt DateTime? @map("sms_code_expires_at") @db.Timestamptz(6)
+  // Not in the original schema — lets a user deactivate their own account.
+  // Blocks sign-in; a pastor's church drops out of Browse/Popular/Live/feed
+  // listings while the underlying rows are left intact (no reactivation flow
+  // exists yet, so this isn't a hard delete).
+  deactivatedAt DateTime? @map("deactivated_at") @db.Timestamptz(6)
+  // Not in the original schema — self-reported at signup (or silently
+  // inferred from IP via geoip-lite as a fallback when left blank), then
+  // editable in Account settings from then on. Powers the "Churches Near
+  // You" recommendation feed (see app/api/churches/recommended/route.js) for
+  // seekers; unused/unset for pastors (their church has its own location).
+  city          String?   @map("city")
+  state         String?   @map("state")
+  country       String?   @map("country")
+  // Not in the original schema — self-selected at signup (or edited later in
+  // Account settings) from the shared taxonomy in lib/interests.js. Powers
+  // app/api/churches/recommended's interest-overlap scoring against a
+  // church's own `interests` below.
+  interests     String[]  @default([]) @map("interests")
+  // Not in the original schema — set alongside deactivatedAt when Trust &
+  // Safety (rather than the user themselves) suspends the account, so email
+  // copy and audit trails can distinguish "I deactivated my own account"
+  // (deactivatedAt set, this null) from "T&S suspended me" (both set). Every
+  // existing deactivatedAt-null gate (sign-in, Browse/Popular/feed listings)
+  // already covers this for free since it's the same underlying field.
+  suspensionReason String? @map("suspension_reason")
+  // Not in the original schema — set whenever a *full* session is granted
+  // (sign-in, OAuth, or completing 2FA), never on a 2FA-pending partial
+  // session. Powers the behavior-triggered inactivity emails (see
+  // lib/behaviorEmails.js) — for a pastor, "activity" also includes going
+  // live, so those checks combine this with the church's most recent
+  // Stream.startedAt rather than relying on this field alone.
+  lastLoginAt   DateTime? @map("last_login_at") @db.Timestamptz(6)
+  // Not in the original schema — CAN-SPAM opt-out for the behavior-triggered
+  // lifecycle emails (never applies to transactional mail like receipts or
+  // password resets). Set via GET /api/email-preferences/unsubscribe's
+  // signed link, which every lifecycle email footer includes — every
+  // lifecycle-cron query filters on this being false.
+  marketingOptOut Boolean @default(false) @map("marketing_opt_out")
+  // Not in the original schema — null means this account still owes the
+  // post-signup onboarding step (pick 3 interests, and for seekers, follow 2
+  // churches). Only ever set going forward from when this field was added —
+  // the migration backfills every existing row so current users are never
+  // prompted, this is a new-signup-only flow. See app/api/onboarding/complete.
+  onboardingCompletedAt DateTime? @map("onboarding_completed_at") @db.Timestamptz(6)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  churches           Church[]            @relation("ChurchOwner")
+  follows            Follow[]
+  viewEvents         ViewEvent[]
+  donations          Donation[]
+  verificationTokens VerificationToken[]
+  likes              Like[]
+  comments           Comment[]
+  notifications      Notification[]
+  favorites          Favorite[]
+  donorNotes         DonorNote[]
+  pollResponses      PollResponse[]
+  prayerRequests     PrayerRequest[]
+  pushSubscriptions  PushSubscription[]
+  givingSubscriptions GivingSubscription[]
+  contentReports     ContentReport[]
+  behaviorEmailLog   BehaviorEmailLog[]
+  termsAcceptances   TermsAcceptance[]
+
+  @@map("users")
+}
+
+// ============ WEB PUSH ============
+// Not in the original schema — one row per browser/device a user has
+// enabled push notifications on (a user can have several). `endpoint` is
+// the push service URL the browser handed back from
+// PushManager.subscribe() — unique per subscription, used as the natural
+// key so re-subscribing the same device just upserts in place.
+model PushSubscription {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("push_subscriptions")
+}
+
+// ============ CHURCHES / CHANNELS ============
+model Church {
+  id         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId    String  @map("owner_id") @db.Uuid
+  name       String
+  slug       String  @unique
+  bio        String?
+  churchSize String? @map("church_size")
+  bannerUrl  String? @map("banner_url")
+  address    String?
+  // Not in the original schema — structured (distinct from the free-text
+  // `address` above) so it can be compared/sorted on for the seeker
+  // recommendation feed. Self-reported at signup (or inferred from the
+  // pastor's IP via geoip-lite when left blank), editable later in Settings.
+  city       String? @map("city")
+  state      String? @map("state")
+  country    String? @map("country")
+  // Not in the original schema — added per requirement that pastors declare
+  // their faith tradition at signup. Nullable at the DB level only so this
+  // migration doesn't break the church row that already existed before this
+  // field existed; new signups are required to set it at the application layer.
+  religion   Religion?
+  // Not in the original schema — pastor self-tags their church's content
+  // from the same shared taxonomy (lib/interests.js) a seeker picks at
+  // signup, set at church signup or edited later in Settings. Matched
+  // against User.interests above for app/api/churches/recommended's
+  // interest-overlap scoring.
+  interests  String[] @default([]) @map("interests")
+  // Not in the original schema — Ministry+ "stream graphic overlay" feature.
+  // This is a branded image frame rendered around the embedded player on
+  // church.html, not composited into the video stream itself (true in-stream
+  // compositing requires the pastor's own OBS/vMix before it reaches our
+  // ingest — see lib/plans.js's 'stream_overlays' feature note).
+  overlayImageUrl String? @map("overlay_image_url")
+  // Not in the original schema — Congregation-only text-to-give. Populated
+  // once a per-church number is provisioned through a (currently unwired)
+  // Twilio account; null means the feature is gated off / not yet set up.
+  textToGivePhoneNumber String? @map("text_to_give_phone_number")
+
+  // Stripe Connect
+  stripeAccountId String?  @unique @map("stripe_account_id")
+  stripeOnboarded Boolean  @default(false) @map("stripe_onboarded")
+  // Non-sensitive fields collected by our own custom payout onboarding
+  // wizard (Business Type / Business Details / Public Details steps) before
+  // handing off to Stripe's own embedded form for personal identity + bank
+  // account — those two stay inside Stripe's iframe and are never persisted
+  // here. `ein` and the business_* address/phone fields only apply when
+  // businessType is non_profit (Stripe has no `company` object for
+  // individual accounts, so that step is skipped in that case).
+  businessType             BusinessType? @map("business_type")
+  ein                      String?       @map("ein")
+  businessAddressLine1     String?       @map("business_address_line1")
+  businessAddressCity      String?       @map("business_address_city")
+  businessAddressState     String?       @map("business_address_state")
+  businessAddressPostalCode String?      @map("business_address_postal_code")
+  businessPhone            String?       @map("business_phone")
+  supportEmail             String?       @map("support_email")
+
+  // Subscription plan (the pastor's monthly or annual fee to Gather)
+  plan                 ChurchPlan @default(starter)
+  stripeCustomerId     String?    @unique @map("stripe_customer_id")
+  stripeSubscriptionId String?    @unique @map("stripe_subscription_id")
+  subscriptionStatus   String?    @default("trialing") @map("subscription_status")
+  trialEndsAt          DateTime?  @map("trial_ends_at") @db.Timestamptz(6)
+  // Not in the original schema — 'month' | 'year', null when there's no
+  // active paid subscription (starter/free). Plain nullable string, same
+  // convention as subscriptionStatus above rather than a Prisma enum.
+  billingInterval       String?   @map("billing_interval")
+
+  // Not in the original schema — pastor subscription payment-retry/dunning
+  // tracking (day-0/day-3/day-7 schedule; see app/api/webhooks/stripe and
+  // app/api/cron/subscription-retries). subscriptionStatus gains a
+  // 'suspended' value once the day-7 retry fails; these four fields reset to
+  // null/0 the moment a payment succeeds. Deliberately doesn't touch seeker
+  // recurring-gift billing (GivingSubscription) — that's a separate,
+  // unaffected flow.
+  paymentFailedAt      DateTime? @map("payment_failed_at") @db.Timestamptz(6)
+  retryCount           Int       @default(0) @map("retry_count")
+  accessLockedAt       DateTime? @map("access_locked_at") @db.Timestamptz(6)
+  lastFailedInvoiceId  String?   @map("last_failed_invoice_id")
+
+  // Not in the original schema — Trust & Safety financial-crime layer (see
+  // lib/detectSuspiciousGiving.js). 'active' | 'flagged' | 'suspended', plain
+  // string matching subscriptionStatus's own convention rather than an enum.
+  // 'flagged' pauses payouts (see transferDonationPayout in lib/payouts.js)
+  // without touching subscriptionStatus/access — giving and streaming keep
+  // working while the review happens, same "don't collateral-damage the
+  // congregation" principle as the dunning suspension above.
+  verificationStatus String  @default("active") @map("verification_status")
+  flaggedReason       String? @map("flagged_reason")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  owner         User           @relation("ChurchOwner", fields: [ownerId], references: [id])
+  sermons       Sermon[]
+  streams       Stream[]
+  follows       Follow[]
+  donations     Donation[]
+  posts         Post[]
+  notifications Notification[]
+  donorNotes    DonorNote[]
+  givingFunds   GivingFund[]
+  givingSubscriptions GivingSubscription[]
+  planCapHits   PlanCapHit[]
+
+  @@map("churches")
+}
+
+// ============ SERMONS (VOD) ============
+model Sermon {
+  id                   String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  churchId             String       @map("church_id") @db.Uuid
+  title                String
+  description          String?
+  category             String?
+  series               String?
+  thumbnailUrl         String?      @map("thumbnail_url")
+  videoProviderAssetId String?      @unique @map("video_provider_asset_id")
+  // Not in the original schema — Mux direct-upload webhooks arrive with an
+  // upload id before the asset id exists, so we need this to correlate them.
+  muxUploadId          String?      @unique @map("mux_upload_id")
+  playbackId           String?      @map("playback_id")
+  durationSeconds      Int?         @map("duration_seconds")
+  status               SermonStatus @default(processing)
+  // Not in the original schema — lets a pastor unpublish a sermon from their
+  // public profile without deleting it outright.
+  hidden               Boolean      @default(false)
+  // Not in the original schema — a simple tally (not a per-user log) of how
+  // many times a seeker has used the Share button on this sermon.
+  shareCount           Int          @default(0) @map("share_count")
+  // Not in the original schema — Trust & Safety content-moderation gate (see
+  // lib/moderation.js). DB default is 'clean' so this migration doesn't
+  // retroactively hide sermons that were already public before this column
+  // existed; app/api/sermons/upload explicitly sets new rows to
+  // 'pending_review' at creation, and the Mux asset.ready handler promotes
+  // to 'clean' after a passing scan (or 'removed'/'blocked' if flagged)
+  // before the sermon is ever surfaced to followers.
+  moderationStatus     ModerationStatus @default(clean) @map("moderation_status")
+  publishedAt          DateTime?    @map("published_at") @db.Timestamptz(6)
+  createdAt            DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  church     Church      @relation(fields: [churchId], references: [id])
+  streams    Stream[]
+  viewEvents ViewEvent[]
+  likes      Like[]
+  comments   Comment[]
+  favorites  Favorite[]
+
+  @@map("sermons")
+}
+
+// ============ LIVE STREAMS ============
+model Stream {
+  id                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  churchId          String       @map("church_id") @db.Uuid
+  title             String
+  description       String?
+  streamKey         String       @map("stream_key")
+  rtmpUrl           String       @map("rtmp_url")
+  // Not in the original schema — needed to correlate Mux live-stream
+  // webhooks (which arrive keyed by Mux's live stream id) back to this row.
+  muxLiveStreamId   String?      @unique @map("mux_live_stream_id")
+  playbackId        String?      @map("playback_id")
+  status            StreamStatus @default(idle)
+  startedAt         DateTime?    @map("started_at") @db.Timestamptz(6)
+  endedAt           DateTime?    @map("ended_at") @db.Timestamptz(6)
+  recordedSermonId  String?      @map("recorded_sermon_id") @db.Uuid
+  // Not in the original schema — a simple tally (not a per-user log) of how
+  // many times a seeker has used the Share button on this stream.
+  shareCount        Int          @default(0) @map("share_count")
+  // Not in the original schema — Ministry+ stream scheduling. When set and
+  // status is still 'idle', the stream shows up on the church's public
+  // Upcoming list; Congregation's green-room countdown also keys off this.
+  scheduledAt       DateTime?    @map("scheduled_at") @db.Timestamptz(6)
+  // Not in the original schema — Congregation-only green room. Shown on the
+  // public stream page instead of a blank/offline state once scheduledAt is
+  // set and the stream hasn't gone live yet.
+  countdownMessage  String?      @map("countdown_message")
+  // Not in the original schema — live-stream counterpart to
+  // Sermon.moderationStatus, driven by app/api/cron/moderate-live-streams'
+  // periodic frame sampling. 'removed'/'blocked' means the stream was
+  // force-terminated by that job; defaults to 'clean' since a stream isn't
+  // publicly watchable until it's live anyway (nothing to backfill-hide).
+  moderationStatus  ModerationStatus @default(clean) @map("moderation_status")
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  church           Church            @relation(fields: [churchId], references: [id])
+  recordedSermon   Sermon?           @relation(fields: [recordedSermonId], references: [id])
+  viewEvents       ViewEvent[]
+  likes            Like[]
+  comments         Comment[]
+  simulcastTargets SimulcastTarget[]
+  polls            StreamPoll[]
+  prayerRequests   PrayerRequest[]
+
+  @@index([churchId, scheduledAt])
+  @@map("streams")
+}
+
+// ============ FOLLOWS ============
+model Follow {
+  seekerId  String   @map("seeker_id") @db.Uuid
+  churchId  String   @map("church_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  seeker User   @relation(fields: [seekerId], references: [id])
+  church Church @relation(fields: [churchId], references: [id])
+
+  @@id([seekerId, churchId])
+  @@map("follows")
+}
+
+// ============ WATCH ANALYTICS ============
+model ViewEvent {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sermonId     String?  @map("sermon_id") @db.Uuid
+  streamId     String?  @map("stream_id") @db.Uuid
+  seekerId     String?  @map("seeker_id") @db.Uuid
+  watchSeconds Int?     @map("watch_seconds")
+  deviceType   String?  @map("device_type")
+  // Not in the original schema — bumped on creation and on every watch-time
+  // heartbeat PATCH, so a stream's concurrent-viewer count (plan viewer cap)
+  // can be derived as "rows recently heartbeated", without a separate
+  // presence/websocket system.
+  lastHeartbeatAt DateTime @default(now()) @map("last_heartbeat_at") @db.Timestamptz(6)
+  // Not in the original schema — country code resolved from the viewer's IP
+  // via an offline geolocation lookup (see app/api/view-events/route.js),
+  // powering the Ministry+ analytics location breakdown. Null when
+  // unresolvable (e.g. localhost/private IPs in dev) — expected, not an error.
+  country      String?
+  // Not in the original schema — city/region (state) resolved alongside
+  // country above, preferring the signed-in seeker's own self-reported
+  // profile location when available (more trustworthy than an IP guess),
+  // falling back to the same geoip-lite lookup otherwise. Powers the
+  // Ministry+ "Top Cities" analytics breakdown.
+  city         String?
+  region       String?
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  sermon Sermon? @relation(fields: [sermonId], references: [id])
+  stream Stream? @relation(fields: [streamId], references: [id])
+  seeker User?   @relation(fields: [seekerId], references: [id])
+
+  @@index([streamId, lastHeartbeatAt])
+  @@map("view_events")
+}
+
+// ============ DONATIONS / OFFERINGS ============
+model Donation {
+  id               String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  churchId         String  @map("church_id") @db.Uuid
+  giverId          String? @map("giver_id") @db.Uuid
+  amountCents      Int     @map("amount_cents")
+  platformFeeCents Int     @map("platform_fee_cents")
+  netCents         Int     @map("net_cents")
+  isRecurring      Boolean @default(false) @map("is_recurring")
+
+  stripePaymentIntentId String? @unique @map("stripe_payment_intent_id")
+  stripeSubscriptionId  String? @map("stripe_subscription_id")
+  // Not in the original schema; added so recurring-donation webhook retries
+  // (Stripe delivers invoice.paid at-least-once) don't create duplicate rows.
+  stripeInvoiceId       String? @unique @map("stripe_invoice_id")
+  // Not in the original schema — added for the hold-and-distribute payment
+  // model (separate charges and transfers). The charge lands on the
+  // platform's own Stripe balance; this is the id of the Transfer that moved
+  // netCents out to the church's connected account. Null means the transfer
+  // was never attempted (donation not yet processed by the webhook) or it
+  // failed and needs manual follow-up.
+  stripeTransferId      String? @unique @map("stripe_transfer_id")
+  // Cumulative amount already clawed back from the church via transfer
+  // reversal, driven by charge.refunded / charge.dispute.created webhooks.
+  // Tracked (rather than just reversing blindly) so repeated partial refunds
+  // and at-least-once webhook delivery don't double-reverse the same funds.
+  reversedCents         Int     @default(0) @map("reversed_cents")
+  // Not in the original schema — Stripe's payment_method_details.card.fingerprint,
+  // captured off the charge at donation-creation time (see
+  // app/api/webhooks/stripe/route.js). Same card reused across many gifts
+  // hashes to the same fingerprint even with a different giverId/email, which
+  // is what lets lib/detectSuspiciousGiving.js's card-testing check work —
+  // Stripe never exposes the actual card number, only this hash. Null for
+  // donations recorded before this field existed.
+  cardFingerprint       String? @map("card_fingerprint")
+
+  note      String?
+  // Not in the original schema — Congregation-only multiple giving funds.
+  // Null means "general fund" for churches that never set up funds at all.
+  fundId    String?  @map("fund_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  church Church      @relation(fields: [churchId], references: [id])
+  giver  User?       @relation(fields: [giverId], references: [id])
+  fund   GivingFund? @relation(fields: [fundId], references: [id])
+
+  @@map("donations")
+}
+
+// ============ EMAIL VERIFICATION & PASSWORD RESET ============
+// Not in the original schema — added to support forgot-password and
+// email-verification links, which need a single-use, expiring token tied
+// back to a user.
+model VerificationToken {
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String       @map("user_id") @db.Uuid
+  token     String       @unique
+  purpose   TokenPurpose
+  expiresAt DateTime     @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime?    @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("verification_tokens")
+}
+
+// ============ SOCIAL: LIKES & COMMENTS ============
+// Not in the original schema — added so seekers can like/comment on a sermon,
+// a live stream, or a pastor's timeline post. Exactly one of
+// sermonId/streamId/postId is set per row (enforced by a CHECK constraint
+// written directly in the migration, since Prisma has no first-class way to
+// express it in the schema).
+model Like {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  sermonId  String?  @map("sermon_id") @db.Uuid
+  streamId  String?  @map("stream_id") @db.Uuid
+  postId    String?  @map("post_id") @db.Uuid
+  // Not in the original schema — lets a viewer like an individual comment,
+  // separate from liking the sermon/stream/post the comment was left on.
+  commentId String?  @map("comment_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sermon  Sermon?  @relation(fields: [sermonId], references: [id], onDelete: Cascade)
+  stream  Stream?  @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  post    Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sermonId])
+  @@unique([userId, streamId])
+  @@unique([userId, postId])
+  @@unique([userId, commentId])
+  @@map("likes")
+}
+
+model Comment {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  sermonId  String?  @map("sermon_id") @db.Uuid
+  streamId  String?  @map("stream_id") @db.Uuid
+  postId    String?  @map("post_id") @db.Uuid
+  body      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sermon Sermon? @relation(fields: [sermonId], references: [id], onDelete: Cascade)
+  stream Stream? @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  post   Post?   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  likes  Like[]
+
+  @@map("comments")
+}
+
+// ============ FAVORITES (seeker's saved/bookmarked videos) ============
+// Not in the original schema — lets a seeker bookmark an uploaded sermon to
+// watch later, separate from Like (which is a public engagement signal, not
+// a personal "save for later" list). Sermons only — there's no equivalent
+// concept for livestreams or posts.
+model Favorite {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  sermonId  String   @map("sermon_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sermon Sermon @relation(fields: [sermonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sermonId])
+  @@map("favorites")
+}
+
+// ============ PASTOR POSTS / SEEKER TIMELINE ============
+// Not in the original schema — short text updates a pastor posts to their
+// church page, visible in the timeline of seekers who follow that church.
+model Post {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  churchId  String   @map("church_id") @db.Uuid
+  body      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  church   Church    @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  likes    Like[]
+  comments Comment[]
+
+  @@map("posts")
+}
+
+// ============ PRE-LAUNCH WAITLIST ============
+// Not in the original schema — captures "Notify Me" signups from the
+// coming-soon page. Kept as our own source of truth alongside the Resend
+// Audience (resendContactId) so the list survives even if Resend contacts
+// are edited/removed, and so campaign sends aren't the only place this data lives.
+model WaitlistSignup {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email           String   @unique
+  resendContactId String?  @map("resend_contact_id")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("waitlist_signups")
+}
+
+// ============ NOTIFICATIONS ============
+// Not in the original schema — fan-out-on-write: one row per follower per
+// event (new post, a sermon finishing processing, going live). Simple to
+// query per-user; fine at this scale since it's bounded by follower count.
+model Notification {
+  id        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  churchId  String           @map("church_id") @db.Uuid
+  type      NotificationType
+  title     String
+  body      String?
+  // Where clicking the notification should take the seeker — a church.html
+  // deep link for sermon/live, left null for post (client routes those to
+  // the seeker's own timeline instead, since a single post has no public URL).
+  linkUrl   String?          @map("link_url")
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  church Church @relation(fields: [churchId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+// ============ MINISTRY: DONOR NOTES/TAGS ============
+// Not in the original schema — a private (pastor-only) note + tag set on a
+// specific giver at a specific church. One row per (church, giver) pair;
+// editing just updates it in place rather than versioning history.
+model DonorNote {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  churchId  String   @map("church_id") @db.Uuid
+  giverId   String   @map("giver_id") @db.Uuid
+  note      String?
+  tags      String[] @default([])
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  church Church @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  giver  User   @relation(fields: [giverId], references: [id], onDelete: Cascade)
+
+  @@unique([churchId, giverId])
+  @@map("donor_notes")
+}
+
+// ============ CONGREGATION: SIMULCAST ============
+// Not in the original schema — the pastor's own YouTube/Facebook RTMP
+// destination for a given stream's Mux Simulcast Target. Credentials are the
+// pastor's, entered once in Settings; wiring these into Mux at go-live time
+// requires a Mux plan with the Simulcast Targets add-on enabled.
+model SimulcastTarget {
+  id        String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  streamId  String            @map("stream_id") @db.Uuid
+  platform  SimulcastPlatform
+  rtmpUrl   String            @map("rtmp_url")
+  streamKey String            @map("stream_key")
+  // Not set until go-live actually registers this target with Mux.
+  muxSimulcastTargetId String? @map("mux_simulcast_target_id")
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  stream Stream @relation(fields: [streamId], references: [id], onDelete: Cascade)
+
+  @@unique([streamId, platform])
+  @@map("simulcast_targets")
+}
+
+// ============ CONGREGATION: LIVE POLLS ============
+// Not in the original schema — a pastor-created poll shown to viewers during
+// a specific stream. `options` is a JSON array of option strings.
+model StreamPoll {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  streamId  String   @map("stream_id") @db.Uuid
+  question  String
+  options   Json
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  stream    Stream         @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  responses PollResponse[]
+
+  @@map("stream_polls")
+}
+
+model PollResponse {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  pollId         String   @map("poll_id") @db.Uuid
+  seekerId       String?  @map("seeker_id") @db.Uuid
+  selectedOption String   @map("selected_option")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  poll   StreamPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  seeker User?      @relation(fields: [seekerId], references: [id], onDelete: SetNull)
+
+  // Postgres treats NULLs as distinct, so this only actually blocks a
+  // second vote from a signed-in seeker — anonymous (null) responses are
+  // intentionally unrestricted by this constraint.
+  @@unique([pollId, seekerId])
+  @@map("poll_responses")
+}
+
+// ============ CONGREGATION: PRAYER REQUESTS ============
+// Not in the original schema — a viewer's prayer request submitted during a
+// specific stream. Visible to the pastor always; visible to other viewers
+// only when isPublic is true.
+model PrayerRequest {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  streamId  String   @map("stream_id") @db.Uuid
+  seekerId  String?  @map("seeker_id") @db.Uuid
+  message   String
+  isPublic  Boolean  @default(true) @map("is_public")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  stream Stream @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  seeker User?  @relation(fields: [seekerId], references: [id], onDelete: SetNull)
+
+  @@map("prayer_requests")
+}
+
+// ============ CONGREGATION: MULTIPLE GIVING FUNDS ============
+// Not in the original schema — lets a church split giving into named funds
+// (General, Building, Missions, ...). Exactly one row per church should have
+// isDefault true (enforced at the application layer, not a DB constraint).
+model GivingFund {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  churchId  String   @map("church_id") @db.Uuid
+  name      String
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  church    Church     @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  donations Donation[]
+  givingSubscriptions GivingSubscription[]
+
+  @@map("giving_funds")
+}
+
+// ============ RECURRING GIFT SUBSCRIPTIONS ============
+// Not in the original schema — one row per Stripe recurring-gift
+// subscription, distinct from Donation (which stays a pure per-charge
+// ledger — one row per invoice paid). This is the only place a recurring
+// gift's live/paused/canceled status is tracked; Stripe itself has no
+// denormalized copy of it here otherwise.
+model GivingSubscription {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  churchId             String    @map("church_id") @db.Uuid
+  giverId              String    @map("giver_id") @db.Uuid
+  stripeSubscriptionId String    @unique @map("stripe_subscription_id")
+  amountCents          Int       @map("amount_cents")
+  fundId               String?   @map("fund_id") @db.Uuid
+  note                 String?
+  // 'active' | 'paused' | 'canceled' — plain string, matches
+  // Church.subscriptionStatus's existing convention rather than an enum.
+  status               String    @default("active")
+  // Set only when lib/givingCap.js auto-pauses this subscription because the
+  // church hit its plan's monthly giving cap — distinguishes that from a
+  // giver's own manual pause (which leaves this null) so the monthly reset
+  // in resumeStaleCapPauses() only ever resumes pauses it caused itself,
+  // never a pause the giver chose on their own.
+  pausedForCapAt       DateTime? @map("paused_for_cap_at") @db.Timestamptz(6)
+  canceledAt           DateTime? @map("canceled_at") @db.Timestamptz(6)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  church Church      @relation(fields: [churchId], references: [id])
+  giver  User        @relation(fields: [giverId], references: [id])
+  fund   GivingFund? @relation(fields: [fundId], references: [id])
+
+  @@map("giving_subscriptions")
+}
+
+// ============ TRUST & SAFETY: MODERATION ============
+// Not in the original schema — shared moderation infrastructure across all
+// three T&S tiers (CSAM auto-pipeline, general nudity/inappropriate content,
+// financial-crime flags). See lib/moderation.js and
+// lib/detectSuspiciousGiving.js. contentId is a polymorphic reference
+// (Sermon.id / Stream.id / a future chat message or profile id) rather than
+// a real foreign key, since it can point at any of several tables depending
+// on contentType — deliberately not modeled as a Prisma relation.
+model ContentReport {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  // Nullable — automated detections (the overwhelming majority: CSAM hash
+  // matches, nudity classifier flags, fraud-pattern flags) have no reporter.
+  reporterId      String?           @map("reporter_id") @db.Uuid
+  contentType     ReportContentType @map("content_type")
+  contentId       String            @map("content_id") @db.Uuid
+  category        ReportCategory
+  detectionSource DetectionSource   @map("detection_source")
+  status          ReportStatus      @default(pending)
+  // Confidence score from the moderation vendor's classifier (0-100),
+  // null for exact CSAM hash matches (those are binary, not scored) and for
+  // user_report rows (a human report has no confidence score to attach).
+  confidenceScore Int?              @map("confidence_score")
+  // Only set for category: csam — 18 U.S.C. § 2258A(h) requires preserving
+  // reported material and associated records for 90 days from the NCMEC
+  // report, extendable to 180 if law enforcement requests it. Set to now()+90d
+  // at report time by lib/moderation.js; extend manually to +180d if asked.
+  retainUntil     DateTime?         @map("retain_until") @db.Timestamptz(6)
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  reporter   User?              @relation(fields: [reporterId], references: [id])
+  actions    ModerationAction[]
+  dmcaNotice DmcaNotice?
+
+  @@index([status, category])
+  @@index([contentType, contentId])
+  @@map("content_reports")
+}
+
+model ModerationAction {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reportId    String   @map("report_id") @db.Uuid
+  // 'content_removed' | 'content_blocked' | 'content_restored' |
+  // 'account_suspended' | 'account_reactivated' | 'account_terminated' |
+  // 'ncmec_reported' | 'stream_terminated' | 'payouts_paused' |
+  // 'report_dismissed' | 'report_approved' | 'counter_notice_recorded' |
+  // 'litigation_filed' — free-text rather than an enum since this is an
+  // append-only audit log and the set of describable actions will keep
+  // growing as new moderation flows get added.
+  actionTaken String   @map("action_taken")
+  // 'system' for anything the automated pipeline did on its own (CSAM
+  // matches always take this path — no human step), or a User.id string for
+  // an admin's own review-queue decision.
+  actionedBy  String   @map("actioned_by")
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  report ContentReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+  @@map("moderation_actions")
+}
+
+// ============ TRUST & SAFETY: DMCA ============
+// Not in the original schema — see lib/dmca.js and the DMCA Copyright
+// Policy doc, sections 1-5. One row per takedown notice, 1:1 with a
+// ContentReport (category: copyright) so it shares that table's generic
+// status/audit-trail plumbing (ModerationAction, the admin review queue) —
+// but a DMCA notice carries legally-required fields (claimant identity,
+// signed statements) no other report category needs, hence the separate
+// table rather than bloating ContentReport with mostly-null columns.
+//
+// Unlike CSAM/nudity, a DMCA takedown is *immediate* on receipt of a valid
+// notice (policy section 2) — there's no "hold pending review" step, because
+// the admin recording the notice as valid *is* the review. status starts
+// 'valid' and only changes if the account holder counter-notices (section 3);
+// only 'valid' notices count toward the repeat-infringer threshold (section
+// 5) — once counter-noticed the notice is no longer "uncontested".
+model DmcaNotice {
+  id       String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reportId String @unique @map("report_id") @db.Uuid
+
+  claimantName    String  @map("claimant_name")
+  claimantEmail   String  @map("claimant_email")
+  claimantAddress String? @map("claimant_address")
+  claimantPhone   String? @map("claimant_phone")
+  // Policy section 1, item 2 — identification of the copyrighted work
+  // (or a representative list, if the notice covers several).
+  copyrightedWorkDescription String @map("copyrighted_work_description")
+  // Policy section 1, items 5-6 — both must be true for a notice to be
+  // legally effective; recordDmcaTakedown in lib/dmca.js refuses to create a
+  // row at all if either is false, rather than storing an invalid notice.
+  goodFaithStatement Boolean @map("good_faith_statement")
+  perjuryStatement   Boolean @map("perjury_statement")
+  // Electronic signature text (policy section 1, item 1) — typed name, not
+  // a cryptographic signature; the DMCA accepts this for online notices.
+  signature String
+
+  status DmcaNoticeStatus @default(valid)
+
+  // Set when the account holder submits a counter-notice (policy section 3).
+  counterNoticeAt   DateTime? @map("counter_notice_at") @db.Timestamptz(6)
+  // counterNoticeAt + the policy's 14-business-day outer bound (see
+  // DMCA_COUNTER_NOTICE_RESTORE_DAYS in lib/dmca.js) — app/api/cron/dmca-restore
+  // restores the content once this passes, unless litigationFiledAt is set.
+  restoreEligibleAt DateTime? @map("restore_eligible_at") @db.Timestamptz(6)
+  restoredAt        DateTime? @map("restored_at") @db.Timestamptz(6)
+  // Set if the original claimant notifies us they've filed suit — blocks the
+  // automatic restore regardless of restoreEligibleAt (policy section 3).
+  litigationFiledAt DateTime? @map("litigation_filed_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  report ContentReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@map("dmca_notices")
+}
+
+// ============ BEHAVIOR-TRIGGERED EMAILS ============
+// Not in the original schema. One row per church per time a cap-check
+// route (app/api/view-events, sermons/upload, donations/intent|subscription)
+// actually rejected a request for hitting a plan limit — written at most
+// once per (church, capType, contextId) so "3 consecutive streams hit the
+// viewer cap" counts streams, not raw rejected requests within one stream.
+// See lib/behaviorEmails.js's logCapHit / streams-hit-cap query.
+model PlanCapHit {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  churchId  String   @map("church_id") @db.Uuid
+  // 'viewer' | 'storage' | 'giving'
+  capType   String   @map("cap_type")
+  // The Stream.id a viewer-cap hit happened on — null for storage/giving
+  // caps, which are church-level rather than per-stream.
+  contextId String?  @map("context_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  church Church @relation(fields: [churchId], references: [id], onDelete: Cascade)
+
+  @@unique([churchId, capType, contextId])
+  @@index([churchId, capType, createdAt])
+  @@map("plan_cap_hits")
+}
+
+// Generic per-user dedup log for every cron-driven behavior email in
+// lib/behaviorEmails.js / app/api/cron/seeker-lifecycle-emails /
+// .../pastor-lifecycle-emails — one row per (user, emailKey) actually sent.
+// emailKey is a stable string per email type (optionally suffixed with a
+// period/milestone, e.g. 'pastor_giving_decline_2026-08' or
+// 'pastor_follower_milestone_500') so recurring checks can tell "already
+// told them about this exact occurrence" apart from "this is a new one."
+model BehaviorEmailLog {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  emailKey  String   @map("email_key")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, emailKey])
+  @@map("behavior_email_log")
+}
+
+// ============ TERMS OF SERVICE / PRIVACY POLICY ACCEPTANCE ============
+// One row per time a user affirmatively accepts the Terms of Service and
+// Privacy Policy — at signup for every account-creation path (password,
+// OAuth seeker auto-create, OAuth pastor completion). `version` is
+// lib/terms.js's TERMS_VERSION at the moment of acceptance, not the
+// current version, so this row stays an accurate historical record even
+// after the documents are later revised. Append-only: nothing here is
+// ever updated or deleted by the app itself.
+model TermsAcceptance {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  version    String
+  ipAddress  String?  @map("ip_address")
+  acceptedAt DateTime @default(now()) @map("accepted_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("terms_acceptances")
+}

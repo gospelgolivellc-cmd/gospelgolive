@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "coming-soon-static",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "4173", "--directory", "Coming-soon"],
+      "port": 4173
+    },
+    {
+      "name": "mockup-static",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "4174", "--directory", "reference"],
+      "port": 4174
+    },
+    {
+      "name": "prisma-studio",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\npx.cmd",
+      "runtimeArgs": ["prisma", "studio", "--port", "5555", "--browser", "none"],
+      "port": 5555
+    },
+    {
+      "name": "next-dev",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": ["node_modules/next/dist/bin/next", "dev", "-p", "3001"],
+      "port": 3001
+    }
+  ]
+}

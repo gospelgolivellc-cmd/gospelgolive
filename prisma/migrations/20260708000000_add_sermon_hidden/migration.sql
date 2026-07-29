@@ -1,0 +1,1 @@
+ALTER TABLE "sermons" ADD COLUMN "hidden" BOOLEAN NOT NULL DEFAULT false;

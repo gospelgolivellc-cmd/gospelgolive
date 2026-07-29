@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moderation queue — GospelGoLive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg-deep: #060c1f;
+  --panel: #122548;
+  --border-soft: rgba(255,255,255,0.08);
+  --gold: #e8b84b;
+  --gold-soft: #f5d787;
+  --gold-dim: rgba(232,184,75,0.14);
+  --text: #eef1f8;
+  --text-dim: #a6b0cc;
+  --text-faint: #6b7593;
+  --red: #e05a5a;
+  --teal: #3fa39b;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+body{
+  background:var(--bg-deep); color:var(--text); font-family:'Inter',sans-serif;
+  min-height:100vh; padding:32px 20px;
+}
+.wrap{max-width:760px; margin:0 auto;}
+h1{font-family:'Fraunces',serif; font-size:26px; margin-bottom:6px;}
+p.sub{color:var(--text-faint); font-size:13.5px; margin-bottom:24px;}
+.view-switch{display:flex; gap:8px; margin-bottom:20px; border-bottom:1px solid var(--border-soft); padding-bottom:20px;}
+.view-tab{
+  padding:8px 18px; border-radius:999px; border:1px solid var(--border-soft); background:transparent;
+  color:var(--text-dim); font-size:13.5px; font-weight:700; cursor:pointer;
+}
+.view-tab.active{background:var(--gold); border-color:var(--gold); color:#20160a;}
+.view{display:none;}
+.view.active{display:block;}
+.tabs{display:flex; gap:8px; margin-bottom:20px;}
+.tab{
+  padding:7px 16px; border-radius:999px; border:1px solid var(--border-soft); background:transparent;
+  color:var(--text-dim); font-size:13px; font-weight:600; cursor:pointer;
+}
+.tab.active{background:var(--gold-dim); border-color:var(--gold); color:var(--gold-soft);}
+.card{
+  background:var(--panel); border:1px solid var(--border-soft); border-radius:16px;
+  padding:20px 22px; margin-bottom:14px;
+}
+.card .top{display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:10px;}
+.badge{
+  display:inline-block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+  padding:3px 10px; border-radius:999px; background:var(--gold-dim); color:var(--gold-soft);
+}
+.badge.csam{background:rgba(224,90,90,0.16); color:var(--red);}
+.badge.fraud{background:rgba(63,163,155,0.16); color:var(--teal);}
+.badge.copyright{background:rgba(63,163,155,0.16); color:var(--teal);}
+.meta{color:var(--text-faint); font-size:12.5px; margin-bottom:4px;}
+.actions{display:flex; gap:8px; margin-top:14px;}
+.actions textarea{
+  width:100%; background:var(--bg-deep); border:1px solid var(--border-soft); border-radius:10px;
+  padding:9px 12px; color:var(--text); font-size:13px; margin-bottom:10px; resize:vertical; min-height:44px;
+}
+.btn{
+  padding:8px 18px; border-radius:999px; border:none; font-weight:600; font-size:13px; cursor:pointer;
+}
+.btn.primary{background:linear-gradient(180deg,var(--gold-soft),var(--gold)); color:#20160a;}
+.btn.danger{background:rgba(224,90,90,0.16); color:var(--red);}
+.btn.secondary{background:rgba(255,255,255,0.06); color:var(--text);}
+.btn:disabled{opacity:0.5; cursor:default;}
+.empty{color:var(--text-faint); text-align:center; padding:60px 0; font-size:14px;}
+.err{color:var(--red); font-size:13px; margin-bottom:14px; display:none;}
+.log{margin-top:12px; padding-top:12px; border-top:1px solid var(--border-soft); font-size:12px; color:var(--text-faint);}
+.log div{margin-bottom:3px;}
+.form-card{background:var(--panel); border:1px solid var(--border-soft); border-radius:16px; padding:22px; margin-bottom:24px;}
+.form-card h2{font-size:15px; margin-bottom:14px;}
+.field{margin-bottom:12px;}
+.field label{display:block; font-size:12px; color:var(--text-dim); margin-bottom:5px; font-weight:600;}
+.field input, .field textarea, .field select{
+  width:100%; background:var(--bg-deep); border:1px solid var(--border-soft); border-radius:8px;
+  padding:9px 11px; color:var(--text); font-size:13px; font-family:inherit;
+}
+.field textarea{resize:vertical; min-height:60px;}
+.row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+.check{display:flex; align-items:flex-start; gap:8px; margin-bottom:10px; font-size:12.5px; color:var(--text-dim);}
+.check input{width:auto; margin-top:3px;}
+.success{color:var(--teal); font-size:13px; margin-bottom:14px; display:none;}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Moderation queue</h1>
+    <p class="sub">Trust &amp; Safety review — general content reports, financial-crime flags, and DMCA copyright notices. CSAM reports never appear here; that pipeline is fully automated with no discretionary step.</p>
+
+    <div class="view-switch">
+      <button class="view-tab active" data-view="reports">Content Reports</button>
+      <button class="view-tab" data-view="dmca">DMCA Notices</button>
+    </div>
+
+    <!-- ============ CONTENT REPORTS VIEW ============ -->
+    <div class="view active" id="view-reports">
+      <div class="err" id="err"></div>
+      <div class="tabs">
+        <button class="tab active" data-status="pending">Pending</button>
+        <button class="tab" data-status="under_review">Under review</button>
+        <button class="tab" data-status="all">All</button>
+      </div>
+      <div id="list"></div>
+    </div>
+
+    <!-- ============ DMCA VIEW ============ -->
+    <div class="view" id="view-dmca">
+      <div class="err" id="dmca-err"></div>
+      <div class="success" id="dmca-success"></div>
+
+      <div class="form-card">
+        <h2>Log a new DMCA takedown notice</h2>
+        <p class="sub" style="margin-bottom:14px;">Only log a notice here once you've confirmed a received notice actually contains all six statutory elements (policy section 1). Submitting removes the content immediately.</p>
+        <form id="dmca-form">
+          <div class="row2">
+            <div class="field">
+              <label>Content type</label>
+              <select id="f-contentType">
+                <option value="sermon">Sermon</option>
+                <option value="stream">Stream</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Content ID</label>
+              <input id="f-contentId" placeholder="UUID" required>
+            </div>
+          </div>
+          <div class="row2">
+            <div class="field">
+              <label>Claimant name</label>
+              <input id="f-claimantName" required>
+            </div>
+            <div class="field">
+              <label>Claimant email</label>
+              <input id="f-claimantEmail" type="email" required>
+            </div>
+          </div>
+          <div class="row2">
+            <div class="field">
+              <label>Claimant address (optional)</label>
+              <input id="f-claimantAddress">
+            </div>
+            <div class="field">
+              <label>Claimant phone (optional)</label>
+              <input id="f-claimantPhone">
+            </div>
+          </div>
+          <div class="field">
+            <label>Identification of the copyrighted work</label>
+            <textarea id="f-work" required></textarea>
+          </div>
+          <div class="field">
+            <label>Claimant's electronic signature (typed name)</label>
+            <input id="f-signature" required>
+          </div>
+          <div class="check">
+            <input type="checkbox" id="f-goodFaith" required>
+            <label for="f-goodFaith">Notice includes a good-faith statement that the use is not authorized (policy section 1, item 5)</label>
+          </div>
+          <div class="check">
+            <input type="checkbox" id="f-perjury" required>
+            <label for="f-perjury">Notice includes a statement under penalty of perjury that the information is accurate and the sender is authorized to act (policy section 1, item 6)</label>
+          </div>
+          <button type="submit" class="btn danger">Log notice &amp; remove content</button>
+        </form>
+      </div>
+
+      <div id="dmca-list"></div>
+    </div>
+  </div>
+
+<script>
+const errEl = document.getElementById('err');
+let currentStatus = 'pending';
+
+function showError(msg) {
+  errEl.textContent = msg;
+  errEl.style.display = msg ? 'block' : 'none';
+}
+
+function categoryBadgeClass(category) {
+  if (category === 'csam') return 'badge csam';
+  if (category === 'fraud_suspicion') return 'badge fraud';
+  if (category === 'copyright') return 'badge copyright';
+  return 'badge';
+}
+
+function renderReport(report) {
+  const isFraud = report.category === 'fraud_suspicion';
+  const card = document.createElement('div');
+  card.className = 'card';
+
+  const actionsLog = (report.actions || [])
+    .map((a) => `<div>${new Date(a.createdAt).toLocaleString()} — ${a.actionTaken} (${a.actionedBy})${a.notes ? ': ' + a.notes : ''}</div>`)
+    .join('');
+
+  // Copyright reports go through the DMCA view's own workflow (counter-notice
+  // / litigation-filed), not this generic approve/remove path — show them
+  // read-only here so an admin doesn't try the wrong action against one.
+  const isCopyright = report.category === 'copyright';
+
+  card.innerHTML = `
+    <div class="top">
+      <div>
+        <span class="${categoryBadgeClass(report.category)}">${report.category.replace('_', ' ')}</span>
+        <div class="meta" style="margin-top:8px;">${report.contentType} · ${report.contentId}</div>
+        <div class="meta">Detected: ${report.detectionSource}${report.confidenceScore != null ? ' · confidence ' + report.confidenceScore : ''}</div>
+        <div class="meta">Reported: ${new Date(report.createdAt).toLocaleString()}</div>
+      </div>
+      <span class="badge">${report.status.replace('_', ' ')}</span>
+    </div>
+    ${
+      isCopyright
+        ? `<p class="meta">Manage this notice from the DMCA Notices tab above.</p>`
+        : `<div class="actions">
+        <div style="width:100%;">
+          <textarea placeholder="Notes (optional)"></textarea>
+          <div>
+            <button class="btn primary" data-decision="${isFraud ? 'clear' : 'approve'}">${isFraud ? 'Clear flag' : 'Approve (keep live)'}</button>
+            <button class="btn danger" data-decision="${isFraud ? 'confirm' : 'remove'}">${isFraud ? 'Confirm fraud' : 'Remove content'}</button>
+          </div>
+        </div>
+      </div>`
+    }
+    ${actionsLog ? `<div class="log">${actionsLog}</div>` : ''}
+  `;
+
+  const textarea = card.querySelector('textarea');
+  card.querySelectorAll('button[data-decision]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      card.querySelectorAll('button').forEach((b) => (b.disabled = true));
+      showError('');
+      try {
+        const res = await fetch(`/api/admin/reports/${report.id}/action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ decision: btn.dataset.decision, notes: textarea.value || undefined }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Action failed');
+        loadReports(currentStatus);
+      } catch (err) {
+        showError(err.message);
+        card.querySelectorAll('button').forEach((b) => (b.disabled = false));
+      }
+    });
+  });
+
+  return card;
+}
+
+async function loadReports(status) {
+  const listEl = document.getElementById('list');
+  showError('');
+  listEl.innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    const res = await fetch(`/api/admin/reports?status=${status}`);
+    if (res.status === 401 || res.status === 403) {
+      throw new Error('Sign in as an admin to view the moderation queue.');
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load reports');
+
+    listEl.innerHTML = '';
+    if (data.reports.length === 0) {
+      listEl.innerHTML = '<div class="empty">Nothing here.</div>';
+      return;
+    }
+    data.reports.forEach((r) => listEl.appendChild(renderReport(r)));
+  } catch (err) {
+    listEl.innerHTML = '';
+    showError(err.message);
+  }
+}
+
+document.querySelectorAll('.tabs .tab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tabs .tab').forEach((t) => t.classList.remove('active'));
+    tab.classList.add('active');
+    currentStatus = tab.dataset.status;
+    loadReports(currentStatus);
+  });
+});
+
+// ================================================================
+// DMCA view
+// ================================================================
+
+const dmcaErrEl = document.getElementById('dmca-err');
+const dmcaSuccessEl = document.getElementById('dmca-success');
+
+function showDmcaError(msg) {
+  dmcaErrEl.textContent = msg;
+  dmcaErrEl.style.display = msg ? 'block' : 'none';
+}
+function showDmcaSuccess(msg) {
+  dmcaSuccessEl.textContent = msg;
+  dmcaSuccessEl.style.display = msg ? 'block' : 'none';
+}
+
+function noticeStatusBadge(notice) {
+  if (notice.status === 'valid') return '<span class="badge">valid — content removed</span>';
+  if (notice.status === 'counter_noticed') {
+    return notice.litigationFiledAt
+      ? '<span class="badge">counter-noticed — litigation filed, restore blocked</span>'
+      : `<span class="badge">counter-noticed — restores ${new Date(notice.restoreEligibleAt).toLocaleDateString()}</span>`;
+  }
+  if (notice.status === 'restored') return '<span class="badge copyright">restored</span>';
+  return `<span class="badge">${notice.status}</span>`;
+}
+
+function renderNotice(notice) {
+  const card = document.createElement('div');
+  card.className = 'card';
+
+  const actionsLog = (notice.report?.actions || [])
+    .map((a) => `<div>${new Date(a.createdAt).toLocaleString()} — ${a.actionTaken} (${a.actionedBy})${a.notes ? ': ' + a.notes : ''}</div>`)
+    .join('');
+
+  card.innerHTML = `
+    <div class="top">
+      <div>
+        <span class="badge copyright">copyright</span>
+        <div class="meta" style="margin-top:8px;">${notice.report?.contentType || ''} · ${notice.report?.contentId || ''}</div>
+        <div class="meta">Claimant: ${notice.claimantName} &lt;${notice.claimantEmail}&gt;</div>
+        <div class="meta">Work: ${notice.copyrightedWorkDescription}</div>
+        <div class="meta">Filed: ${new Date(notice.createdAt).toLocaleString()}</div>
+      </div>
+      ${noticeStatusBadge(notice)}
+    </div>
+    <div class="actions">
+      <div style="width:100%;">
+        ${notice.status === 'valid' ? `<button class="btn secondary" data-action="counter-notice">Record counter-notice</button>` : ''}
+        ${notice.status === 'counter_noticed' && !notice.litigationFiledAt ? `<button class="btn danger" data-action="litigation">Mark litigation filed</button>` : ''}
+      </div>
+    </div>
+    ${actionsLog ? `<div class="log">${actionsLog}</div>` : ''}
+  `;
+
+  card.querySelectorAll('button[data-action]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      card.querySelectorAll('button').forEach((b) => (b.disabled = true));
+      showDmcaError('');
+      try {
+        const res = await fetch(`/api/admin/dmca-notices/${notice.id}/${btn.dataset.action}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Action failed');
+        loadNotices();
+      } catch (err) {
+        showDmcaError(err.message);
+        card.querySelectorAll('button').forEach((b) => (b.disabled = false));
+      }
+    });
+  });
+
+  return card;
+}
+
+async function loadNotices() {
+  const listEl = document.getElementById('dmca-list');
+  showDmcaError('');
+  listEl.innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    const res = await fetch('/api/admin/dmca-notices');
+    if (res.status === 401 || res.status === 403) {
+      throw new Error('Sign in as an admin to view DMCA notices.');
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load notices');
+
+    listEl.innerHTML = '';
+    if (data.notices.length === 0) {
+      listEl.innerHTML = '<div class="empty">No DMCA notices logged yet.</div>';
+      return;
+    }
+    data.notices.forEach((n) => listEl.appendChild(renderNotice(n)));
+  } catch (err) {
+    listEl.innerHTML = '';
+    showDmcaError(err.message);
+  }
+}
+
+document.getElementById('dmca-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  showDmcaError('');
+  showDmcaSuccess('');
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+
+  const payload = {
+    contentType: document.getElementById('f-contentType').value,
+    contentId: document.getElementById('f-contentId').value.trim(),
+    claimant: {
+      name: document.getElementById('f-claimantName').value.trim(),
+      email: document.getElementById('f-claimantEmail').value.trim(),
+      address: document.getElementById('f-claimantAddress').value.trim() || undefined,
+      phone: document.getElementById('f-claimantPhone').value.trim() || undefined,
+    },
+    copyrightedWorkDescription: document.getElementById('f-work').value.trim(),
+    signature: document.getElementById('f-signature').value.trim(),
+    goodFaithStatement: document.getElementById('f-goodFaith').checked,
+    perjuryStatement: document.getElementById('f-perjury').checked,
+  };
+
+  try {
+    const res = await fetch('/api/admin/dmca-notices', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to log notice');
+
+    showDmcaSuccess(
+      data.terminated
+        ? `Content removed. This account has now hit ${data.validNoticeCount} valid notices and has been permanently terminated per the repeat infringer policy.`
+        : `Content removed. This account now has ${data.validNoticeCount} valid notice(s) on record.`
+    );
+    e.target.reset();
+    loadNotices();
+  } catch (err) {
+    showDmcaError(err.message);
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+// ================================================================
+// View switcher
+// ================================================================
+document.querySelectorAll('.view-tab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.view-tab').forEach((t) => t.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'));
+    document.getElementById(`view-${tab.dataset.view}`).classList.add('active');
+
+    if (tab.dataset.view === 'dmca') loadNotices();
+  });
+});
+
+loadReports(currentStatus);
+</script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+# dependencies
+/node_modules
+relay-service/node_modules
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# env files
+.env
+.env*.local
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+
+# prisma
+/prisma/dev.db
+
+.vercel
+.env*
+
+# Claude Code personal/local settings — can contain secrets logged into
+# permission-rule strings from past sessions; never meant to be committed.
+.claude/settings.local.json

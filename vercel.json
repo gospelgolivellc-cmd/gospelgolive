@@ -1,0 +1,29 @@
+{
+  "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/cron/subscription-retries",
+      "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/fraud-review",
+      "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/moderate-live-streams",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/seeker-lifecycle-emails",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/pastor-lifecycle-emails",
+      "schedule": "30 13 * * *"
+    },
+    {
+      "path": "/api/cron/dmca-restore",
+      "schedule": "0 16 * * *"
+    }
+  ]
+}

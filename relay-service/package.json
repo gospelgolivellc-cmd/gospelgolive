@@ -1,0 +1,15 @@
+{
+  "name": "gospelgolive-ingest-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Always-on ffmpeg relay for GospelGoLive's in-browser camera Go Live feature. Lives outside Vercel because the ffmpeg process it manages needs to survive across requests, which serverless functions can't guarantee.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.3.0"
+  }
+}
